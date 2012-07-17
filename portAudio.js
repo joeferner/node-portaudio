@@ -7,9 +7,10 @@ var portAudioBindings = require("bindings")("portAudio.node");
 exports.SampleFormat8Bit = 8;
 
 exports.open = function (opts, callback) {
-  opts.bufferSize = opts.bufferSize || 1 * 1024 * 1024; // 1MB
+  // We add one so that we know when we are full or empty: http://en.wikipedia.org/wiki/Circular_buffer#Always_Keep_One_Slot_Open
+  opts.bufferSize = (opts.bufferSize || 1 * 1024 * 1024 /* 1MB */) + 1;
   opts.channelCount = opts.channelCount || 2;
-  opts.sampleFormat = opts.sampleFormat || portAudio.SampleFormat8Bit;
+  opts.sampleFormat = opts.sampleFormat || exports.SampleFormat8Bit;
   opts.sampleRate = opts.sampleRate || 44100;
   opts.toEventEmitter = function (clazz) {
     util.inherits(clazz, events.EventEmitter);

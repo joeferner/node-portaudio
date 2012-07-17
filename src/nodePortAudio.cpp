@@ -107,7 +107,7 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
 
   data = new PortAudioData();
   data->readIdx = 0;
-  data->writeIdx = 0;
+  data->writeIdx = 1;
   data->sampleFormat = outputParameters.sampleFormat;
 
   v8Stream = g_streamConstructor->NewInstance();
@@ -152,6 +152,11 @@ openDone:
 #define STREAM_DATA \
   PortAudioData* data = (PortAudioData*)args.This()->GetPointerFromInternalField(0);
 
+#define EMIT_BUFFER_OVERRUN \
+  v8::Handle<v8::Value> emitArgs[1]; \
+  emitArgs[0] = v8::String::New("overrun"); \
+  v8::Function::Cast(*args.This()->Get(v8::String::New("emit")))->Call(args.This(), 1, emitArgs);
+
 v8::Handle<v8::Value> stream_stop(const v8::Arguments& args) {
   v8::HandleScope scope;
   STREAM_DATA;
@@ -184,6 +189,11 @@ v8::Handle<v8::Value> stream_writeByte(const v8::Arguments& args) {
   v8::HandleScope scope;
   STREAM_DATA;
 
+  if(data->writeIdx == data->readIdx) {
+    EMIT_BUFFER_OVERRUN;
+    return scope.Close(v8::Undefined());
+  }
+
   int val = args[0]->ToInt32()->Value();
   data->buffer[data->writeIdx++] = val;
   if(data->writeIdx >= data->bufferLen) {
@@ -201,6 +211,11 @@ v8::Handle<v8::Value> stream_write(const v8::Arguments& args) {
   int bufferLen = node::Buffer::Length(buffer);
   unsigned char* p = (unsigned char*)node::Buffer::Data(buffer);
   for(int i=0; i<bufferLen; i++) {
+    if(data->writeIdx == data->readIdx) {
+      EMIT_BUFFER_OVERRUN;
+      return scope.Close(v8::Undefined());
+    }
+
     data->buffer[data->writeIdx++] = *p++;
     if(data->writeIdx >= data->bufferLen) {
       data->writeIdx = 0;
@@ -208,6 +223,19 @@ v8::Handle<v8::Value> stream_write(const v8::Arguments& args) {
   }
 
   return scope.Close(v8::Undefined());
+}
+
+void EIO_EmitUnderrun(uv_work_t* req) {
+
+}
+
+void EIO_EmitUnderrunAfter(uv_work_t* req) {
+  v8::HandleScope scope;
+  PortAudioData* request = (PortAudioData*)req->data;
+
+  v8::Handle<v8::Value> emitArgs[1];
+  emitArgs[0] = v8::String::New("underrun");
+  v8::Function::Cast(*request->v8Stream->Get(v8::String::New("emit")))->Call(request->v8Stream, 1, emitArgs);
 }
 
 static int nodePortAudioCallback(
@@ -227,7 +255,10 @@ static int nodePortAudioCallback(
       unsigned char* out = (unsigned char*)outputBuffer;
       for(i = 0; i < framesPerBuffer; i++) {
         if(data->readIdx == data->writeIdx) {
-          printf("buffer underrun\n"); // TODO: emit underrun event
+          uv_work_t* req = new uv_work_t();
+          req->data = data;
+          uv_queue_work(uv_default_loop(), req, EIO_EmitUnderrun, EIO_EmitUnderrunAfter);
+          return paContinue;
         }
         *out++ = data->buffer[data->readIdx++];
         if(data->readIdx >= data->bufferLen) {
