@@ -5,6 +5,9 @@ var events = require("events");
 var portAudioBindings = require("bindings")("portAudio.node");
 
 exports.SampleFormat8Bit = 8;
+exports.SampleFormat16Bit = 16;
+exports.SampleFormat24Bit = 24;
+exports.SampleFormat32Bit = 32;
 
 exports.open = function (opts, callback) {
   // We add one so that we know when we are full or empty: http://en.wikipedia.org/wiki/Circular_buffer#Always_Keep_One_Slot_Open

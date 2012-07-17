@@ -13,6 +13,7 @@ struct PortAudioData {
   int readIdx;
   int writeIdx;
   int sampleFormat;
+  int channelCount;
   PaStream* stream;
   v8::Persistent<v8::Object> v8Stream;
 };
@@ -96,6 +97,15 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   case 8:
     outputParameters.sampleFormat = paInt8;
     break;
+  case 16:
+    outputParameters.sampleFormat = paInt16;
+    break;
+  case 24:
+    outputParameters.sampleFormat = paInt24;
+    break;
+  case 32:
+    outputParameters.sampleFormat = paInt32;
+    break;
   default:
     argv[0] = v8::Exception::TypeError(v8::String::New("Invalid sampleFormat"));
     goto openDone;
@@ -109,6 +119,7 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   data = new PortAudioData();
   data->readIdx = 0;
   data->writeIdx = 1;
+  data->channelCount = outputParameters.channelCount;
   data->sampleFormat = outputParameters.sampleFormat;
 
   v8Stream = g_streamConstructor->NewInstance();
@@ -260,24 +271,36 @@ static int nodePortAudioCallback(
   PortAudioData* data = (PortAudioData*)userData;
   unsigned long i;
 
+  int multiplier = 1;
   switch(data->sampleFormat) {
   case paInt8:
-    {
-      unsigned char* out = (unsigned char*)outputBuffer;
-      for(i = 0; i < framesPerBuffer; i++) {
-        if(data->readIdx == data->writeIdx) {
-          uv_work_t* req = new uv_work_t();
-          req->data = data;
-          uv_queue_work(uv_default_loop(), req, EIO_EmitUnderrun, EIO_EmitUnderrunAfter);
-          return paContinue;
-        }
-        *out++ = data->buffer[data->readIdx++];
-        if(data->readIdx >= data->bufferLen) {
-          data->readIdx = 0;
-        }
-      }
-    }
+    multiplier = 1;
     break;
+  case paInt16:
+    multiplier = 2;
+    break;
+  case paInt24:
+    multiplier = 3;
+    break;
+  case paInt32:
+    multiplier = 4;
+    break;
+  }
+
+  multiplier = multiplier * data->channelCount;
+
+  unsigned char* out = (unsigned char*)outputBuffer;
+  for(i = 0; i < framesPerBuffer * multiplier; i++) {
+    if(data->readIdx == data->writeIdx) {
+      uv_work_t* req = new uv_work_t();
+      req->data = data;
+      uv_queue_work(uv_default_loop(), req, EIO_EmitUnderrun, EIO_EmitUnderrunAfter);
+      return paContinue;
+    }
+    *out++ = data->buffer[data->readIdx++];
+    if(data->readIdx >= data->bufferLen) {
+      data->readIdx = 0;
+    }
   }
 
   return paContinue;
