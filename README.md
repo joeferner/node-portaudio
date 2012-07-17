@@ -3,7 +3,9 @@
 
 Node wrapper around [PortAudio](http://www.portaudio.com/)
 
-*NOTE:
+**Note: This module has not been tested on windows. If you would like to submit a pull request that would be great.**
+
+**Note: You must install PortAudio libs first.**
 
 ## Example
 
