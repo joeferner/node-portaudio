@@ -2,6 +2,13 @@
   "name": "portaudio",
   "description": "Node bindings for PortAudio",
   "author": "Joe Ferner <joe.ferner@nearinfinity.com>",
+  "keywords": [
+    "portaudio",
+    "audio",
+    "raw",
+    "play",
+    "wav"
+  ],
   "version": "0.0.1",
   "maintainers": [
     { "name": "Joe Ferner", "email": "joe.ferner@nearinfinity.com" }
@@ -21,6 +28,9 @@
   },
   "devDependencies": {
     "nodeunit": "~0.7.4"
+  },
+  "scripts": {
+    "install": "node-gyp configure build"
   },
   "main": "./portAudio.js"
 }

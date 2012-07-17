@@ -3,9 +3,13 @@
 
 Node wrapper around [PortAudio](http://www.portaudio.com/)
 
+*NOTE:
+
 ## Example
 
 ```javascript
+var portAudio = require('portaudio');
+
 // create a sine wave lookup table
 var sampleRate = 44100;
 var tableSize = 200;
