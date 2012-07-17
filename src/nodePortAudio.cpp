@@ -5,6 +5,7 @@
 #define FRAMES_PER_BUFFER  (128)
 
 int g_initialized = false;
+v8::Persistent<v8::Function> g_streamConstructor;
 
 struct PortAudioData {
   unsigned char* buffer;
@@ -39,6 +40,8 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   PortAudioData* data;
   int sampleRate;
   char str[1000];
+  v8::Handle<v8::Value> initArgs[1];
+  v8::Handle<v8::Value> toEventEmitterArgs[1];
 
   v8::Handle<v8::Value> argv[2];
   argv[0] = v8::Undefined();
@@ -57,6 +60,15 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   v8::Local<v8::Value> callback = args[1];
 
   if(!g_initialized) {
+    v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New();
+    t->InstanceTemplate()->SetInternalFieldCount(1);
+    t->SetClassName(v8::String::NewSymbol("PortAudioStream"));
+    g_streamConstructor = v8::Persistent<v8::Function>::New(t->GetFunction());
+
+    toEventEmitterArgs[0] = g_streamConstructor;
+    v8Val = options->Get(v8::String::New("toEventEmitter"));
+    v8::Function::Cast(*v8Val)->Call(options, 1, toEventEmitterArgs);
+
     err = Pa_Initialize();
     if(err != paNoError) {
       sprintf(str, "Could not initialize PortAudio %d", err);
@@ -97,16 +109,16 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   data->readIdx = 0;
   data->writeIdx = 0;
   data->sampleFormat = outputParameters.sampleFormat;
-  v8Stream = options->Get(v8::String::New("stream"))->ToObject();
 
-  // TODO: must be a better way
-  sprintf(str, "%p", data);
-  v8Stream->Set(v8::String::New("_data"), v8::String::New(str));
-
-  v8Buffer = v8Stream->Get(v8::String::New("buffer"))->ToObject();
+  v8Stream = g_streamConstructor->NewInstance();
+  v8Stream->SetPointerInInternalField(0, data);
+  v8Val = options->Get(v8::String::New("streamInit"));
+  initArgs[0] = v8Stream;
+  v8::Function::Cast(*v8Val)->Call(v8Stream, 1, initArgs);
   data->v8Stream = v8::Persistent<v8::Object>::New(v8Stream);
   // TODO: make week and close on complete
 
+  v8Buffer = v8Stream->Get(v8::String::New("buffer"))->ToObject();
   data->buffer = (unsigned char*)node::Buffer::Data(v8Buffer);
   data->bufferLen = node::Buffer::Length(v8Buffer);
 
@@ -138,9 +150,7 @@ openDone:
 }
 
 #define STREAM_DATA \
-  PortAudioData* data; \
-  v8::String::AsciiValue v(args.This()->Get(v8::String::New("_data"))); \
-  sscanf(*v, "%p", &data);
+  PortAudioData* data = (PortAudioData*)args.This()->GetPointerFromInternalField(0);
 
 v8::Handle<v8::Value> stream_stop(const v8::Arguments& args) {
   v8::HandleScope scope;

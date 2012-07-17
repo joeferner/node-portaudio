@@ -12,6 +12,8 @@
   "dependencies": {
     "bindings": "~1.0.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "nodeunit": "~0.7.4"
+  },
   "main": "./portAudio.js"
 }
