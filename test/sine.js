@@ -1,5 +1,3 @@
-'use strict';
-
 var portAudio = require('../');
 
 exports.sine = {

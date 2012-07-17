@@ -29,6 +29,7 @@ v8::Handle<v8::Value> stream_writeByte(const v8::Arguments& args);
 v8::Handle<v8::Value> stream_write(const v8::Arguments& args);
 v8::Handle<v8::Value> stream_start(const v8::Arguments& args);
 v8::Handle<v8::Value> stream_stop(const v8::Arguments& args);
+void CleanupStreamData(v8::Persistent<v8::Value> obj, void *parameter);
 
 v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   v8::HandleScope scope;
@@ -116,7 +117,8 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   initArgs[0] = v8Stream;
   v8::Function::Cast(*v8Val)->Call(v8Stream, 1, initArgs);
   data->v8Stream = v8::Persistent<v8::Object>::New(v8Stream);
-  // TODO: make week and close on complete
+  data->v8Stream.MakeWeak(data, CleanupStreamData);
+  data->v8Stream.MarkIndependent();
 
   v8Buffer = v8Stream->Get(v8::String::New("buffer"))->ToObject();
   data->buffer = (unsigned char*)node::Buffer::Data(v8Buffer);
@@ -149,8 +151,17 @@ openDone:
   return scope.Close(v8::Undefined());
 }
 
+void CleanupStreamData(v8::Persistent<v8::Value> obj, void *parameter) {
+  PortAudioData* data = (PortAudioData*)parameter;
+  data->v8Stream->SetPointerInInternalField(0, NULL);
+  delete data;
+}
+
 #define STREAM_DATA \
-  PortAudioData* data = (PortAudioData*)args.This()->GetPointerFromInternalField(0);
+  PortAudioData* data = (PortAudioData*)args.This()->GetPointerFromInternalField(0); \
+  if(data == NULL) { \
+    return scope.Close(v8::Undefined()); \
+  }
 
 #define EMIT_BUFFER_OVERRUN \
   v8::Handle<v8::Value> emitArgs[1]; \
