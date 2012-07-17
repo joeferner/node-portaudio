@@ -2,7 +2,7 @@
 #include "nodePortAudio.h"
 #include <portaudio.h>
 
-#define FRAMES_PER_BUFFER  (64)
+#define FRAMES_PER_BUFFER  (128)
 
 int g_initialized = false;
 
