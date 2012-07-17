@@ -12,6 +12,7 @@ struct PortAudioData {
   int readIdx;
   int writeIdx;
   int sampleFormat;
+  PaStream* stream;
   v8::Persistent<v8::Object> v8Stream;
 };
 
@@ -24,6 +25,9 @@ static int nodePortAudioCallback(
   void *userData);
 
 v8::Handle<v8::Value> stream_writeByte(const v8::Arguments& args);
+v8::Handle<v8::Value> stream_write(const v8::Arguments& args);
+v8::Handle<v8::Value> stream_start(const v8::Arguments& args);
+v8::Handle<v8::Value> stream_stop(const v8::Arguments& args);
 
 v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   v8::HandleScope scope;
@@ -33,9 +37,7 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   v8::Local<v8::Object> v8Buffer;
   v8::Local<v8::Object> v8Stream;
   PortAudioData* data;
-  PaStream* stream;
   int sampleRate;
-  v8::Local<v8::FunctionTemplate> fnTemplate;
   char str[1000];
 
   v8::Handle<v8::Value> argv[2];
@@ -109,7 +111,7 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   data->bufferLen = node::Buffer::Length(v8Buffer);
 
   err = Pa_OpenStream(
-    &stream,
+    &data->stream,
     NULL, // no input
     &outputParameters,
     sampleRate,
@@ -123,15 +125,10 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
     goto openDone;
   }
 
-  err = Pa_StartStream(stream);
-  if(err != paNoError) {
-    sprintf(str, "Could not start stream %d", err);
-    argv[0] = v8::Exception::TypeError(v8::String::New(str));
-    goto openDone;
-  }
-
-  fnTemplate = v8::FunctionTemplate::New(stream_writeByte);
-  v8Stream->Set(v8::String::New("writeByte"), fnTemplate->GetFunction());
+  v8Stream->Set(v8::String::New("write"), v8::FunctionTemplate::New(stream_write)->GetFunction());
+  v8Stream->Set(v8::String::New("writeByte"), v8::FunctionTemplate::New(stream_writeByte)->GetFunction());
+  v8Stream->Set(v8::String::New("start"), v8::FunctionTemplate::New(stream_start)->GetFunction());
+  v8Stream->Set(v8::String::New("stop"), v8::FunctionTemplate::New(stream_stop)->GetFunction());
 
   argv[1] = v8Stream;
 
@@ -140,15 +137,65 @@ openDone:
   return scope.Close(v8::Undefined());
 }
 
+#define STREAM_DATA \
+  PortAudioData* data; \
+  v8::String::AsciiValue v(args.This()->Get(v8::String::New("_data"))); \
+  sscanf(*v, "%p", &data);
+
+v8::Handle<v8::Value> stream_stop(const v8::Arguments& args) {
+  v8::HandleScope scope;
+  STREAM_DATA;
+
+  PaError err = Pa_CloseStream(data->stream);
+  if(err != paNoError) {
+    char str[1000];
+    sprintf(str, "Could not start stream %d", err);
+    return scope.Close(v8::ThrowException(v8::Exception::TypeError(v8::String::New(str))));
+  }
+
+  return scope.Close(v8::Undefined());
+}
+
+v8::Handle<v8::Value> stream_start(const v8::Arguments& args) {
+  v8::HandleScope scope;
+  STREAM_DATA;
+
+  PaError err = Pa_StartStream(data->stream);
+  if(err != paNoError) {
+    char str[1000];
+    sprintf(str, "Could not start stream %d", err);
+    return scope.Close(v8::ThrowException(v8::Exception::TypeError(v8::String::New(str))));
+  }
+
+  return scope.Close(v8::Undefined());
+}
+
 v8::Handle<v8::Value> stream_writeByte(const v8::Arguments& args) {
   v8::HandleScope scope;
-  PortAudioData* data;
-
-  v8::String::AsciiValue v(args.This()->Get(v8::String::New("_data")));
-  sscanf(*v, "%p", &data);
+  STREAM_DATA;
 
   int val = args[0]->ToInt32()->Value();
   data->buffer[data->writeIdx++] = val;
+  if(data->writeIdx >= data->bufferLen) {
+    data->writeIdx = 0;
+  }
+
+  return scope.Close(v8::Undefined());
+}
+
+v8::Handle<v8::Value> stream_write(const v8::Arguments& args) {
+  v8::HandleScope scope;
+  STREAM_DATA;
+
+  v8::Local<v8::Object> buffer = args[0]->ToObject();
+  int bufferLen = node::Buffer::Length(buffer);
+  unsigned char* p = (unsigned char*)node::Buffer::Data(buffer);
+  for(int i=0; i<bufferLen; i++) {
+    data->buffer[data->writeIdx++] = *p++;
+    if(data->writeIdx >= data->bufferLen) {
+      data->writeIdx = 0;
+    }
+  }
 
   return scope.Close(v8::Undefined());
 }
@@ -169,7 +216,13 @@ static int nodePortAudioCallback(
     {
       unsigned char* out = (unsigned char*)outputBuffer;
       for(i = 0; i < framesPerBuffer; i++) {
+        if(data->readIdx == data->writeIdx) {
+          printf("buffer underrun\n"); // TODO: emit underrun event
+        }
         *out++ = data->buffer[data->readIdx++];
+        if(data->readIdx >= data->bufferLen) {
+          data->readIdx = 0;
+        }
       }
     }
     break;

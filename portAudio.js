@@ -11,10 +11,6 @@ function PortAudioStream() {
 }
 util.inherits(PortAudioStream, events.EventEmitter);
 
-PortAudioStream.prototype.stop = function () {
-  throw new Error("Not implemented");
-};
-
 exports.open = function (opts, callback) {
   opts.stream = new PortAudioStream();
   opts.stream.buffer = new Buffer(1 * 1024 * 1024); // 1MB
