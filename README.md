@@ -43,3 +43,14 @@ portAudio.open({
   }, 1 * 1000);
 });
 ```
+
+## Troubleshooting
+
+### error: 'PaStreamCallbackFlags' has not been declared
+
+Try building and installing portaudio from source (http://www.portaudio.com/download.html). I've compiled
+node-portaudio with pa_stable_v19_20111121.tgz and was successful on Ubunutu.
+
+### No Default Device Found
+
+Ensure that when you compile portaudio that the configure scripts says "ALSA" yes.
