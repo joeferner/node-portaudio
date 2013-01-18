@@ -6,6 +6,7 @@ extern "C" {
   {
     v8::HandleScope scope;
     NODE_SET_METHOD(target, "open", Open);
+    NODE_SET_METHOD(target, "getDevices", GetDevices);
   }
 }
 

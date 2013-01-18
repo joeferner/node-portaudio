@@ -15,7 +15,7 @@ exports.sine = {
       sampleRate: sampleRate
     }, function (err, pa) {
       if (err) {
-        return test.fail(err);
+        return test.done(err);
       }
       pa.on("underrun", function () {
         test.fail("underrun shouldn't be called.");
@@ -53,7 +53,7 @@ exports.sine = {
       sampleRate: sampleRate
     }, function (err, pa) {
       if (err) {
-        return test.fail(err);
+        return test.done(err);
       }
       pa.on("underrun", function () {
         test.fail("underrun shouldn't be called.");
@@ -89,7 +89,7 @@ exports.sine = {
       sampleRate: sampleRate
     }, function (err, pa) {
       if (err) {
-        return test.fail(err);
+        return test.done(err);
       }
       pa.on("underrun", function () {
         test.fail("underrun shouldn't be called.");
@@ -113,7 +113,7 @@ exports.sine = {
       bufferSize: 5
     }, function (err, pa) {
       if (err) {
-        return test.fail(err);
+        return test.done(err);
       }
       pa.on("overrun", function () {
         test.fail("shouldn't be called yet.");
@@ -137,7 +137,7 @@ exports.sine = {
       bufferSize: 5
     }, function (err, pa) {
       if (err) {
-        return test.fail(err);
+        return test.done(err);
       }
       var doneCalled = false;
       pa.on("underrun", function () {

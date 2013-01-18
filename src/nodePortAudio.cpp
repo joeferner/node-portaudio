@@ -5,6 +5,7 @@
 #define FRAMES_PER_BUFFER  (128)
 
 int g_initialized = false;
+int g_portAudioStreamInitialized = false;
 v8::Persistent<v8::Function> g_streamConstructor;
 
 struct PortAudioData {
@@ -32,11 +33,23 @@ v8::Handle<v8::Value> stream_start(const v8::Arguments& args);
 v8::Handle<v8::Value> stream_stop(const v8::Arguments& args);
 void CleanupStreamData(v8::Persistent<v8::Value> obj, void *parameter);
 
+PaError EnsureInitialized() {
+  PaError err;
+
+  if(!g_initialized) {
+    err = Pa_Initialize();
+    if(err != paNoError) {
+      return err;
+    };
+    g_initialized = true;
+  }
+  return paNoError;
+}
+
 v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   v8::HandleScope scope;
   PaError err;
   PaStreamParameters outputParameters;
-  v8::Local<v8::Value> v8Val;
   v8::Local<v8::Object> v8Buffer;
   v8::Local<v8::Object> v8Stream;
   PortAudioData* data;
@@ -44,6 +57,7 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   char str[1000];
   v8::Handle<v8::Value> initArgs[1];
   v8::Handle<v8::Value> toEventEmitterArgs[1];
+  v8::Local<v8::Value> v8Val;
 
   v8::Handle<v8::Value> argv[2];
   argv[0] = v8::Undefined();
@@ -61,7 +75,14 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   }
   v8::Local<v8::Value> callback = args[1];
 
-  if(!g_initialized) {
+  err = EnsureInitialized();
+  if(err != paNoError) {
+    sprintf(str, "Could not initialize PortAudio %d", err);
+    argv[0] = v8::Exception::TypeError(v8::String::New(str));
+    goto openDone;
+  }
+
+  if(!g_portAudioStreamInitialized) {
     v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New();
     t->InstanceTemplate()->SetInternalFieldCount(1);
     t->SetClassName(v8::String::NewSymbol("PortAudioStream"));
@@ -71,13 +92,7 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
     v8Val = options->Get(v8::String::New("toEventEmitter"));
     v8::Function::Cast(*v8Val)->Call(options, 1, toEventEmitterArgs);
 
-    err = Pa_Initialize();
-    if(err != paNoError) {
-      sprintf(str, "Could not initialize PortAudio %d", err);
-      argv[0] = v8::Exception::TypeError(v8::String::New(str));
-      goto openDone;
-    };
-    g_initialized = true;
+    g_portAudioStreamInitialized = true;
   }
 
   memset(&outputParameters, 0, sizeof(PaStreamParameters));
@@ -158,6 +173,46 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   argv[1] = v8Stream;
 
 openDone:
+  v8::Function::Cast(*callback)->Call(v8::Context::GetCurrent()->Global(), 2, argv);
+  return scope.Close(v8::Undefined());
+}
+
+v8::Handle<v8::Value> GetDevices(const v8::Arguments& args) {
+  v8::HandleScope scope;
+  char str[1000];
+  int numDevices;
+  v8::Local<v8::Array> result;
+
+  v8::Handle<v8::Value> argv[2];
+  argv[0] = v8::Undefined();
+  argv[1] = v8::Undefined();
+
+  // callback
+  if(!args[0]->IsFunction()) {
+    return scope.Close(v8::ThrowException(v8::Exception::TypeError(v8::String::New("First argument must be a function"))));
+  }
+  v8::Local<v8::Value> callback = args[0];
+
+  PaError err = EnsureInitialized();
+  if(err != paNoError) {
+    sprintf(str, "Could not initialize PortAudio %d", err);
+    argv[0] = v8::Exception::TypeError(v8::String::New(str));
+    goto getDevicesDone;
+  }
+
+  numDevices = Pa_GetDeviceCount();
+  result = v8::Array::New(numDevices);
+  argv[1] = result;
+  printf("numDevices %d\n", numDevices);
+  for(int i = 0; i < numDevices; i++) {
+    const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(i);
+    v8::Local<v8::Object> v8DeviceInfo = v8::Object::New();
+    v8DeviceInfo->Set(v8::String::New("id"), v8::Integer::New(i));
+    v8DeviceInfo->Set(v8::String::New("name"), v8::String::New(deviceInfo->name));
+    result->Set(i, v8DeviceInfo);
+  }
+
+getDevicesDone:
   v8::Function::Cast(*callback)->Call(v8::Context::GetCurrent()->Global(), 2, argv);
   return scope.Close(v8::Undefined());
 }

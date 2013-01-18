@@ -30,7 +30,8 @@
     "nodeunit": "~0.7.4"
   },
   "scripts": {
-    "install": "node-gyp configure build"
+    "install": "node-gyp configure build",
+    "test": "./node_modules/.bin/nodeunit test"
   },
   "main": "./portAudio.js"
 }

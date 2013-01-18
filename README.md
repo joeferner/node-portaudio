@@ -20,6 +20,10 @@ for (var i = 0; i < tableSize; i++) {
   buffer[i] = (Math.sin((i / tableSize) * 3.1415 * 2.0) * 127) + 127;
 }
 
+portAudio.getDevices(function(err, devices) {
+  console.log(devices);
+});
+
 portAudio.open({
   channelCount: 1,
   sampleFormat: portAudio.SampleFormat8Bit,
