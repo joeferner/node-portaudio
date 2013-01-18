@@ -1,4 +1,3 @@
-
 # portaudio
 
 Node wrapper around [PortAudio](http://www.portaudio.com/)
@@ -48,7 +47,9 @@ portAudio.open({
 
 ### error: 'PaStreamCallbackFlags' has not been declared
 
-Try building and installing portaudio from source (http://www.portaudio.com/download.html). I've compiled
+Try installing "libasound-dev" package. See (http://portaudio.com/docs/v19-doxydocs/compile_linux.html). Then try rebuilding.
+
+If that doesn't fix it try building and installing portaudio from source (http://www.portaudio.com/download.html). I've compiled
 node-portaudio with pa_stable_v19_20111121.tgz and was successful on Ubunutu.
 
 ### No Default Device Found
