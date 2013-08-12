@@ -349,7 +349,7 @@ static int nodePortAudioCallback(
     if(data->readIdx == data->writeIdx) {
       uv_work_t* req = new uv_work_t();
       req->data = data;
-      uv_queue_work(uv_default_loop(), req, EIO_EmitUnderrun, EIO_EmitUnderrunAfter);
+      uv_queue_work(uv_default_loop(), req, EIO_EmitUnderrun, (uv_after_work_cb) EIO_EmitUnderrunAfter);
       return paContinue;
     }
     *out++ = data->buffer[data->readIdx++];
