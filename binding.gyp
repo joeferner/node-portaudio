@@ -6,6 +6,9 @@
         "src/binding.cpp",
         "src/nodePortAudio.cpp"
       ],
+      "include_dirs": [
+        "<!(node -e \"require('nan')\")"
+      ],
       "conditions" : [
         [
           'OS!="win"', {
