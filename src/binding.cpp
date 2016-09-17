@@ -14,8 +14,8 @@ using namespace v8;
 // }
 
 NAN_MODULE_INIT(Init) {
-  // Nan::Set(target, Nan::New("open").ToLocalChecked(),
-  //   Nan::GetFunction(Nan::New<FunctionTemplate>(Open)).ToLocalChecked());
+  Nan::Set(target, Nan::New("open").ToLocalChecked(),
+     Nan::GetFunction(Nan::New<FunctionTemplate>(Open)).ToLocalChecked());
   Nan::Set(target, Nan::New("getDevices").ToLocalChecked(),
     Nan::GetFunction(Nan::New<FunctionTemplate>(GetDevices)).ToLocalChecked());
 }

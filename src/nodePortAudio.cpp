@@ -6,7 +6,7 @@
 
 int g_initialized = false;
 int g_portAudioStreamInitialized = false;
-static Nan::Persistent<v8::Function> g_streamConstructor;
+static Nan::Persistent<v8::Function> streamConstructor;
 
 struct PortAudioData {
   unsigned char* buffer;
@@ -16,8 +16,14 @@ struct PortAudioData {
   int sampleFormat;
   int channelCount;
   PaStream* stream;
-  v8::Persistent<v8::Object> v8Stream;
+  Nan::Persistent<v8::Object> v8Stream;
 };
+
+void CleanupStreamData(const Nan::WeakCallbackInfo<PortAudioData> &data) {
+  PortAudioData* pad = data.GetParameter();
+  Nan::SetInternalFieldPointer(Nan::New(pad->v8Stream), 0, NULL);
+  delete pad;
+}
 
 static int nodePortAudioCallback(
   const void *inputBuffer,
@@ -47,23 +53,22 @@ PaError EnsureInitialized() {
 }
 
 NAN_METHOD(Open) {
-  Nan::EscapableHandleScope esc;
   PaError err;
   PaStreamParameters outputParameters;
-  v8::Local<v8::Object> v8Buffer;
-  v8::Local<v8::Object> v8Stream;
+  Nan::MaybeLocal<v8::Object> v8Buffer;
+  Nan::MaybeLocal<v8::Object> v8Stream;
   PortAudioData* data;
   int sampleRate;
   char str[1000];
   v8::Local<v8::Value> initArgs[1];
   v8::Local<v8::Value> toEventEmitterArgs[1];
-  v8::Local<v8::Value> v8Val;
+  Nan::MaybeLocal<v8::Value> v8Val;
 
-  v8::Local<v8::Value> argv[2];
-  argv[0] = Nan::Undefined();
-  argv[1] = Nan::Undefined();
+  printf("Got here!\n");
 
-  v8::Local<v8::Object> options = info[0].As<v8::Object>();
+  v8::Local<v8::Value> argv[] = { Nan::Null(), Nan::Undefined() };
+
+  Nan::MaybeLocal<v8::Object> options = Nan::To<v8::Object>(info[0].As<v8::Object>());
   Nan::Callback *cb = new Nan::Callback(info[1].As<v8::Function>());
 
   err = EnsureInitialized();
@@ -77,15 +82,79 @@ NAN_METHOD(Open) {
     v8::Local<v8::FunctionTemplate> t = Nan::New<v8::FunctionTemplate>();
     t->InstanceTemplate()->SetInternalFieldCount(1);
     t->SetClassName(Nan::New("PortAudioStream").ToLocalChecked());
-    Nan::Persistent<v8::Function> persistent(t->GetFunction());
-    g_streamConstructor.Reset(persistent);
+    streamConstructor.Reset(Nan::GetFunction(t).ToLocalChecked());
+    printf("Wibdib %s", *Nan::Utf8String(Nan::New(streamConstructor)));
 
-    toEventEmitterArgs[0] = Nan::New(g_streamConstructor);
-    v8Val = options->Get(Nan::New("toEventEmitter").ToLocalChecked());
-    v8::Function::Cast(*v8Val)->Call(options, 1, toEventEmitterArgs);
+    toEventEmitterArgs[0] = Nan::New(streamConstructor);
+    v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("toEventEmitter").ToLocalChecked());
+    printf("v8Val is %s\n", *Nan::Utf8String(v8Val.ToLocalChecked()));
+    Nan::Call(v8Val.ToLocalChecked().As<v8::Function>(),
+      options.ToLocalChecked(), 1, toEventEmitterArgs);
 
     g_portAudioStreamInitialized = true;
   }
+
+  memset(&outputParameters, 0, sizeof(PaStreamParameters));
+
+  outputParameters.device = Pa_GetDefaultOutputDevice();
+  if (outputParameters.device == paNoDevice) {
+    sprintf(str, "No default output device");
+    argv[0] = Nan::Error(str);
+    goto openDone;
+  }
+
+  v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("channelCount").ToLocalChecked());
+  outputParameters.channelCount = Nan::To<int32_t>(v8Val.ToLocalChecked()).FromMaybe(2);
+  printf("Channel count %i\n", outputParameters.channelCount);
+
+  v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("sampleFormat").ToLocalChecked());
+  switch(Nan::To<int32_t>(v8Val.ToLocalChecked()).FromMaybe(0)) {
+  case 8:
+    outputParameters.sampleFormat = paInt8;
+    break;
+  case 16:
+    outputParameters.sampleFormat = paInt16;
+    break;
+  case 24:
+    outputParameters.sampleFormat = paInt24;
+    break;
+  case 32:
+    outputParameters.sampleFormat = paInt32;
+    break;
+  default:
+    argv[0] = Nan::Error("Invalid sampleFormat");
+    goto openDone;
+  }
+  outputParameters.suggestedLatency = Pa_GetDeviceInfo( outputParameters.device )->defaultLowOutputLatency;
+  outputParameters.hostApiSpecificStreamInfo = NULL;
+
+  v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("sampleRate").ToLocalChecked());
+  sampleRate = Nan::To<int32_t>(v8Val.ToLocalChecked()).FromMaybe(44100);
+
+  printf("Sample rate %i\n", sampleRate);
+
+  data = new PortAudioData();
+  data->readIdx = 0;
+  data->writeIdx = 1;
+  data->channelCount = outputParameters.channelCount;
+  data->sampleFormat = outputParameters.sampleFormat;
+
+  v8Stream = Nan::New(streamConstructor)->NewInstance();
+  argv[1] = v8Stream.ToLocalChecked();
+  printf("Internal field count is %i\n", argv[1].As<v8::Object>()->InternalFieldCount());
+  //v8Stream.ToLocalChecked()->SetInternalField(0, data);
+  // v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("streamInit").ToLocalChecked());
+  // initArgs[0] = v8Stream.ToLocalChecked();
+  // Nan::CallAsFunction(Nan::To<v8::Object>(v8Val.ToLocalChecked()).ToLocalChecked(),
+  //   v8Stream.ToLocalChecked(), 1, initArgs);
+  // data->v8Stream.Reset(v8Stream.ToLocalChecked());
+  // data->v8Stream.SetWeak(data, CleanupStreamData, Nan::WeakCallbackType::kParameter);
+  // data->v8Stream.MarkIndependent();
+  //
+  // v8Buffer = Nan::To<v8::Object>(Nan::Get(v8Stream.ToLocalChecked(),
+  //   Nan::New("buffer").ToLocalChecked()).ToLocalChecked());
+  // data->buffer = (unsigned char*)node::Buffer::Data(v8Buffer.ToLocalChecked());
+  // data->bufferLen = node::Buffer::Length(v8Buffer.ToLocalChecked());
 
 openDone:
   cb->Call(2, argv);
@@ -132,9 +201,9 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
     v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New();
     t->InstanceTemplate()->SetInternalFieldCount(1);
     t->SetClassName(v8::String::NewSymbol("PortAudioStream"));
-    g_streamConstructor = v8::Persistent<v8::Function>::New(t->GetFunction());
+    streamConstructor = v8::Persistent<v8::Function>::New(t->GetFunction());
 
-    toEventEmitterArgs[0] = g_streamConstructor;
+    toEventEmitterArgs[0] = streamConstructor;
     v8Val = options->Get(v8::String::New("toEventEmitter"));
     v8::Function::Cast(*v8Val)->Call(options, 1, toEventEmitterArgs);
 
@@ -183,7 +252,7 @@ v8::Handle<v8::Value> Open(const v8::Arguments& args) {
   data->channelCount = outputParameters.channelCount;
   data->sampleFormat = outputParameters.sampleFormat;
 
-  v8Stream = g_streamConstructor->NewInstance();
+  v8Stream = streamConstructor->NewInstance();
   v8Stream->SetPointerInInternalField(0, data);
   v8Val = options->Get(v8::String::New("streamInit"));
   initArgs[0] = v8Stream;
@@ -224,33 +293,33 @@ openDone:
 } */
 
 NAN_METHOD(GetDevices) {
-  Nan::EscapableHandleScope esc;
+  // Nan::EscapableHandleScope esc;
   char str[1000];
   int numDevices;
   Nan::Callback *cb = new Nan::Callback(info[0].As<v8::Function>());
 
-  v8::Local<v8::Value> argv[] = { Nan::Undefined(), Nan::Undefined() };
+  v8::Local<v8::Value> argv[] = { Nan::Null(), Nan::Undefined() };
 
   PaError err = EnsureInitialized();
   if(err != paNoError) {
     sprintf(str, "Could not initialize PortAudio %d", err);
-    argv[0] = esc.Escape(Nan::Error(str));
+    argv[0] = Nan::Error(str);
     cb->Call(1, argv);
   } else {
     numDevices = Pa_GetDeviceCount();
     v8::Local<v8::Array> result = Nan::New<v8::Array>(numDevices);
     printf("numDevices %d\n", numDevices);
 
-    for(int i = 0; i < numDevices; i++) {
+    for ( int i = 0 ; i < numDevices ; i++) {
       const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(i);
       v8::Local<v8::Object> v8DeviceInfo = Nan::New<v8::Object>();
-      v8DeviceInfo->Set(Nan::New("id").ToLocalChecked(), Nan::New(i));
-      v8DeviceInfo->Set(Nan::New("name").ToLocalChecked(), Nan::New(deviceInfo->name).ToLocalChecked());
-      result->Set(i, v8DeviceInfo);
+      Nan::Set(v8DeviceInfo, Nan::New("id").ToLocalChecked(), Nan::New(i));
+      Nan::Set(v8DeviceInfo, Nan::New("name").ToLocalChecked(),
+        Nan::New(deviceInfo->name).ToLocalChecked());
+      Nan::Set(result, i, v8DeviceInfo);
     }
 
-    argv[0] = Nan::Null();
-    argv[1] = esc.Escape(result);
+    argv[1] = result;
     cb->Call(2, argv);
   }
 
@@ -296,13 +365,9 @@ getDevicesDone:
   v8::Function::Cast(*callback)->Call(v8::Context::GetCurrent()->Global(), 2, argv);
   return scope.Close(v8::Undefined());
 }
+*/
 
-void CleanupStreamData(v8::Persistent<v8::Value> obj, void *parameter) {
-  PortAudioData* data = (PortAudioData*)parameter;
-  data->v8Stream->SetPointerInInternalField(0, NULL);
-  delete data;
-}
-
+/*
 #define STREAM_DATA \
   PortAudioData* data = (PortAudioData*)args.This()->GetPointerFromInternalField(0); \
   if(data == NULL) { \
