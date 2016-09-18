@@ -6,7 +6,7 @@
 
 int g_initialized = false;
 int g_portAudioStreamInitialized = false;
-static Nan::Persistent<v8::Function> streamConstructor;
+static Nan::Global<v8::Function> streamConstructor;
 
 struct PortAudioData {
   unsigned char* buffer;
@@ -21,6 +21,7 @@ struct PortAudioData {
 
 void CleanupStreamData(const Nan::WeakCallbackInfo<PortAudioData> &data) {
   PortAudioData* pad = data.GetParameter();
+  printf("Cleaning up stream data.\n");
   Nan::SetInternalFieldPointer(Nan::New(pad->v8Stream), 0, NULL);
   delete pad;
 }
@@ -83,13 +84,13 @@ NAN_METHOD(Open) {
     t->InstanceTemplate()->SetInternalFieldCount(1);
     t->SetClassName(Nan::New("PortAudioStream").ToLocalChecked());
     streamConstructor.Reset(Nan::GetFunction(t).ToLocalChecked());
-    printf("Wibdib %s", *Nan::Utf8String(Nan::New(streamConstructor)));
 
     toEventEmitterArgs[0] = Nan::New(streamConstructor);
     v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("toEventEmitter").ToLocalChecked());
-    printf("v8Val is %s\n", *Nan::Utf8String(v8Val.ToLocalChecked()));
+    printf("Should be 1: %i\n", Nan::NewInstance(Nan::New(streamConstructor)).ToLocalChecked()->InternalFieldCount());
     Nan::Call(v8Val.ToLocalChecked().As<v8::Function>(),
       options.ToLocalChecked(), 1, toEventEmitterArgs);
+    printf("Should be 1: %i\n", Nan::NewInstance(Nan::New(streamConstructor)).ToLocalChecked()->InternalFieldCount());
 
     g_portAudioStreamInitialized = true;
   }
@@ -142,14 +143,14 @@ NAN_METHOD(Open) {
   v8Stream = Nan::New(streamConstructor)->NewInstance();
   argv[1] = v8Stream.ToLocalChecked();
   printf("Internal field count is %i\n", argv[1].As<v8::Object>()->InternalFieldCount());
-  //v8Stream.ToLocalChecked()->SetInternalField(0, data);
-  // v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("streamInit").ToLocalChecked());
-  // initArgs[0] = v8Stream.ToLocalChecked();
-  // Nan::CallAsFunction(Nan::To<v8::Object>(v8Val.ToLocalChecked()).ToLocalChecked(),
-  //   v8Stream.ToLocalChecked(), 1, initArgs);
-  // data->v8Stream.Reset(v8Stream.ToLocalChecked());
-  // data->v8Stream.SetWeak(data, CleanupStreamData, Nan::WeakCallbackType::kParameter);
-  // data->v8Stream.MarkIndependent();
+  Nan::SetInternalFieldPointer(v8Stream.ToLocalChecked(), 0, data);
+  v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("streamInit").ToLocalChecked());
+  initArgs[0] = v8Stream.ToLocalChecked();
+  Nan::CallAsFunction(Nan::To<v8::Object>(v8Val.ToLocalChecked()).ToLocalChecked(),
+     v8Stream.ToLocalChecked(), 1, initArgs);
+  data->v8Stream.Reset(v8Stream.ToLocalChecked());
+  data->v8Stream.SetWeak(data, CleanupStreamData, Nan::WeakCallbackType::kParameter);
+  data->v8Stream.MarkIndependent();
   //
   // v8Buffer = Nan::To<v8::Object>(Nan::Get(v8Stream.ToLocalChecked(),
   //   Nan::New("buffer").ToLocalChecked()).ToLocalChecked());
