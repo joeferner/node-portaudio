@@ -1,6 +1,6 @@
 'use strict';
 
-var portAudio = require('../');
+var portAudio = require('../portAudio.js');
 
 module.exports = {
   "getDevices": function(test) {

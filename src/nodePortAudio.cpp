@@ -20,8 +20,8 @@ struct PortAudioData {
 };
 
 void CleanupStreamData(const Nan::WeakCallbackInfo<PortAudioData> &data) {
-  PortAudioData* pad = data.GetParameter();
   printf("Cleaning up stream data.\n");
+  PortAudioData *pad = data.GetParameter();
   Nan::SetInternalFieldPointer(Nan::New(pad->v8Stream), 0, NULL);
   delete pad;
 }
@@ -34,6 +34,10 @@ static int nodePortAudioCallback(
   PaStreamCallbackFlags statusFlags,
   void *userData);
 
+NAN_METHOD(StreamWriteByte);
+NAN_METHOD(StreamWrite);
+NAN_METHOD(StreamStart);
+NAN_METHOD(StreamStop);
 /*v8::Handle<v8::Value> stream_writeByte(const v8::Arguments& args);
 v8::Handle<v8::Value> stream_write(const v8::Arguments& args);
 v8::Handle<v8::Value> stream_start(const v8::Arguments& args);
@@ -141,7 +145,6 @@ NAN_METHOD(Open) {
   data->sampleFormat = outputParameters.sampleFormat;
 
   v8Stream = Nan::New(streamConstructor)->NewInstance();
-  argv[1] = v8Stream.ToLocalChecked();
   printf("Internal field count is %i\n", argv[1].As<v8::Object>()->InternalFieldCount());
   Nan::SetInternalFieldPointer(v8Stream.ToLocalChecked(), 0, data);
   v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("streamInit").ToLocalChecked());
@@ -151,11 +154,37 @@ NAN_METHOD(Open) {
   data->v8Stream.Reset(v8Stream.ToLocalChecked());
   data->v8Stream.SetWeak(data, CleanupStreamData, Nan::WeakCallbackType::kParameter);
   data->v8Stream.MarkIndependent();
-  //
-  // v8Buffer = Nan::To<v8::Object>(Nan::Get(v8Stream.ToLocalChecked(),
-  //   Nan::New("buffer").ToLocalChecked()).ToLocalChecked());
-  // data->buffer = (unsigned char*)node::Buffer::Data(v8Buffer.ToLocalChecked());
-  // data->bufferLen = node::Buffer::Length(v8Buffer.ToLocalChecked());
+
+  v8Buffer = Nan::To<v8::Object>(Nan::Get(v8Stream.ToLocalChecked(),
+    Nan::New("buffer").ToLocalChecked()).ToLocalChecked());
+  data->buffer = (unsigned char*) node::Buffer::Data(v8Buffer.ToLocalChecked());
+  data->bufferLen = node::Buffer::Length(v8Buffer.ToLocalChecked());
+
+  err = Pa_OpenStream(
+    &data->stream,
+    NULL, // no input
+    &outputParameters,
+    sampleRate,
+    FRAMES_PER_BUFFER,
+    paClipOff, // we won't output out of range samples so don't bother clipping them
+    nodePortAudioCallback,
+    data);
+  if(err != paNoError) {
+    sprintf(str, "Could not open stream %d", err);
+    argv[0] = Nan::Error(str);
+    goto openDone;
+  }
+
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("write").ToLocalChecked(),
+    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(StreamWrite)).ToLocalChecked());
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("writeByte").ToLocalChecked(),
+    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(StreamWriteByte)).ToLocalChecked());
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("start").ToLocalChecked(),
+    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(StreamStart)).ToLocalChecked());
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("stop").ToLocalChecked(),
+    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(StreamStop)).ToLocalChecked());
+
+  argv[1] = v8Stream.ToLocalChecked();
 
 openDone:
   cb->Call(2, argv);
@@ -368,75 +397,73 @@ getDevicesDone:
 }
 */
 
-/*
 #define STREAM_DATA \
-  PortAudioData* data = (PortAudioData*)args.This()->GetPointerFromInternalField(0); \
-  if(data == NULL) { \
-    return scope.Close(v8::Undefined()); \
-  }
+  PortAudioData* data = (PortAudioData*) Nan::GetInternalFieldPointer(info.This(), 0);
 
 #define EMIT_BUFFER_OVERRUN \
-  v8::Handle<v8::Value> emitArgs[1]; \
-  emitArgs[0] = v8::String::New("overrun"); \
-  v8::Function::Cast(*args.This()->Get(v8::String::New("emit")))->Call(args.This(), 1, emitArgs);
+  v8::Local<v8::Value> emitArgs[1]; \
+  emitArgs[0] = Nan::New("overrun").ToLocalChecked(); \
+  Nan::Call(Nan::Get(info.This(), Nan::New("emit").ToLocalChecked()).ToLocalChecked().As<v8::Function>(), \
+    info.This(), 1, emitArgs);
 
-v8::Handle<v8::Value> stream_stop(const v8::Arguments& args) {
-  v8::HandleScope scope;
+NAN_METHOD(StreamStop) {
   STREAM_DATA;
 
-  PaError err = Pa_CloseStream(data->stream);
-  if(err != paNoError) {
-    char str[1000];
-    sprintf(str, "Could not start stream %d", err);
-    return scope.Close(v8::ThrowException(v8::Exception::TypeError(v8::String::New(str))));
+  if (data != NULL) {
+    PaError err = Pa_CloseStream(data->stream);
+    if(err != paNoError) {
+      char str[1000];
+      sprintf(str, "Could not start stream %d", err);
+      Nan::ThrowError(str);
+    }
   }
 
-  return scope.Close(v8::Undefined());
+  info.GetReturnValue().SetUndefined();
 }
 
-v8::Handle<v8::Value> stream_start(const v8::Arguments& args) {
-  v8::HandleScope scope;
+NAN_METHOD(StreamStart) {
   STREAM_DATA;
 
-  PaError err = Pa_StartStream(data->stream);
-  if(err != paNoError) {
-    char str[1000];
-    sprintf(str, "Could not start stream %d", err);
-    return scope.Close(v8::ThrowException(v8::Exception::TypeError(v8::String::New(str))));
+  if (data != NULL) {
+    PaError err = Pa_StartStream(data->stream);
+    if(err != paNoError) {
+      char str[1000];
+      sprintf(str, "Could not start stream %d", err);
+      Nan::ThrowError(str);
+    }
   }
 
-  return scope.Close(v8::Undefined());
+  info.GetReturnValue().SetUndefined();
 }
 
-v8::Handle<v8::Value> stream_writeByte(const v8::Arguments& args) {
-  v8::HandleScope scope;
+NAN_METHOD(StreamWriteByte) {
   STREAM_DATA;
 
-  if(data->writeIdx == data->readIdx) {
-    EMIT_BUFFER_OVERRUN;
-    return scope.Close(v8::Undefined());
-  }
-
-  int val = args[0]->ToInt32()->Value();
-  data->buffer[data->writeIdx++] = val;
-  if(data->writeIdx >= data->bufferLen) {
-    data->writeIdx = 0;
-  }
-
-  return scope.Close(v8::Undefined());
-}
-
-v8::Handle<v8::Value> stream_write(const v8::Arguments& args) {
-  v8::HandleScope scope;
-  STREAM_DATA;
-
-  v8::Local<v8::Object> buffer = args[0]->ToObject();
-  int bufferLen = node::Buffer::Length(buffer);
-  unsigned char* p = (unsigned char*)node::Buffer::Data(buffer);
-  for(int i=0; i<bufferLen; i++) {
+  if (data != NULL) {
     if(data->writeIdx == data->readIdx) {
       EMIT_BUFFER_OVERRUN;
-      return scope.Close(v8::Undefined());
+    } else {
+      int val = Nan::To<int>(info[0]).FromMaybe(0);
+      data->buffer[data->writeIdx++] = val;
+      if(data->writeIdx >= data->bufferLen) {
+        data->writeIdx = 0;
+      }
+    }
+  }
+
+  info.GetReturnValue().SetUndefined();
+}
+
+NAN_METHOD(StreamWrite) {
+  STREAM_DATA;
+
+  v8::Local<v8::Object> buffer = info[0].As<v8::Object>();
+  int bufferLen = node::Buffer::Length(buffer);
+  unsigned char* p = (unsigned char*)node::Buffer::Data(buffer);
+  for ( int i = 0 ; i < bufferLen ; i++ ) {
+    if(data->writeIdx == data->readIdx) {
+      EMIT_BUFFER_OVERRUN;
+      i = bufferLen;
     }
 
     data->buffer[data->writeIdx++] = *p++;
@@ -445,7 +472,7 @@ v8::Handle<v8::Value> stream_write(const v8::Arguments& args) {
     }
   }
 
-  return scope.Close(v8::Undefined());
+  info.GetReturnValue().SetUndefined();
 }
 
 void EIO_EmitUnderrun(uv_work_t* req) {
@@ -453,12 +480,13 @@ void EIO_EmitUnderrun(uv_work_t* req) {
 }
 
 void EIO_EmitUnderrunAfter(uv_work_t* req) {
-  v8::HandleScope scope;
+  Nan::HandleScope scope;
   PortAudioData* request = (PortAudioData*)req->data;
 
-  v8::Handle<v8::Value> emitArgs[1];
-  emitArgs[0] = v8::String::New("underrun");
-  v8::Function::Cast(*request->v8Stream->Get(v8::String::New("emit")))->Call(request->v8Stream, 1, emitArgs);
+  v8::Local<v8::Value> emitArgs[1];
+  emitArgs[0] = Nan::New("underrun").ToLocalChecked();
+  Nan::Call(Nan::Get(Nan::New(request->v8Stream), Nan::New("emit").ToLocalChecked()).ToLocalChecked().As<v8::Function>(),
+    Nan::New(request->v8Stream), 1, emitArgs);
 }
 
 static int nodePortAudioCallback(
@@ -506,4 +534,3 @@ static int nodePortAudioCallback(
 
   return paContinue;
 }
-*/
