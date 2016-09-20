@@ -2,27 +2,32 @@
 #include "nodePortAudio.h"
 #include <portaudio.h>
 
-#define FRAMES_PER_BUFFER  (128)
+#define FRAMES_PER_BUFFER  (192)
 
 int g_initialized = false;
 int g_portAudioStreamInitialized = false;
-static Nan::Global<v8::Function> streamConstructor;
+static Nan::Persistent<v8::Function> streamConstructor;
 
 struct PortAudioData {
   unsigned char* buffer;
+  unsigned char* hangover;
   int bufferLen;
+  int hangoverLen;
   int readIdx;
   int writeIdx;
   int sampleFormat;
   int channelCount;
   PaStream* stream;
   Nan::Persistent<v8::Object> v8Stream;
+  Nan::Persistent<v8::Object> protectBuffer;
+  Nan::Callback *writeCallback;
 };
 
 void CleanupStreamData(const Nan::WeakCallbackInfo<PortAudioData> &data) {
   printf("Cleaning up stream data.\n");
   PortAudioData *pad = data.GetParameter();
   Nan::SetInternalFieldPointer(Nan::New(pad->v8Stream), 0, NULL);
+  free(pad->hangover);
   delete pad;
 }
 
@@ -38,6 +43,7 @@ NAN_METHOD(StreamWriteByte);
 NAN_METHOD(StreamWrite);
 NAN_METHOD(StreamStart);
 NAN_METHOD(StreamStop);
+NAN_METHOD(WritableWrite);
 /*v8::Handle<v8::Value> stream_writeByte(const v8::Arguments& args);
 v8::Handle<v8::Value> stream_write(const v8::Arguments& args);
 v8::Handle<v8::Value> stream_start(const v8::Arguments& args);
@@ -78,7 +84,7 @@ NAN_METHOD(Open) {
 
   err = EnsureInitialized();
   if(err != paNoError) {
-    sprintf(str, "Could not initialize PortAudio %d", err);
+    sprintf(str, "Could not initialize PortAudio: %s", Pa_GetErrorText(err));
     argv[0] = Nan::Error(str);
     goto openDone;
   }
@@ -87,14 +93,15 @@ NAN_METHOD(Open) {
     v8::Local<v8::FunctionTemplate> t = Nan::New<v8::FunctionTemplate>();
     t->InstanceTemplate()->SetInternalFieldCount(1);
     t->SetClassName(Nan::New("PortAudioStream").ToLocalChecked());
+  //  Nan::SetPrototypeMethod(t, "_write", WriteableWrite);
     streamConstructor.Reset(Nan::GetFunction(t).ToLocalChecked());
 
-    toEventEmitterArgs[0] = Nan::New(streamConstructor);
-    v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("toEventEmitter").ToLocalChecked());
-    printf("Should be 1: %i\n", Nan::NewInstance(Nan::New(streamConstructor)).ToLocalChecked()->InternalFieldCount());
-    Nan::Call(v8Val.ToLocalChecked().As<v8::Function>(),
-      options.ToLocalChecked(), 1, toEventEmitterArgs);
-    printf("Should be 1: %i\n", Nan::NewInstance(Nan::New(streamConstructor)).ToLocalChecked()->InternalFieldCount());
+    // toEventEmitterArgs[0] = Nan::New(streamConstructor);
+    // v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("toEventEmitter").ToLocalChecked());
+    // printf("Should be 1: %i\n", Nan::NewInstance(Nan::New(streamConstructor)).ToLocalChecked()->InternalFieldCount());
+    // Nan::Call(v8Val.ToLocalChecked().As<v8::Function>(),
+    //   options.ToLocalChecked(), 1, toEventEmitterArgs);
+    // printf("Should be 1: %i\n", Nan::NewInstance(Nan::New(streamConstructor)).ToLocalChecked()->InternalFieldCount());
 
     g_portAudioStreamInitialized = true;
   }
@@ -143,23 +150,27 @@ NAN_METHOD(Open) {
   data->writeIdx = 1;
   data->channelCount = outputParameters.channelCount;
   data->sampleFormat = outputParameters.sampleFormat;
+  data->hangover = (unsigned char *) malloc(FRAMES_PER_BUFFER * 4);
+  data->hangoverLen = 0;
 
   v8Stream = Nan::New(streamConstructor)->NewInstance();
   printf("Internal field count is %i\n", argv[1].As<v8::Object>()->InternalFieldCount());
   Nan::SetInternalFieldPointer(v8Stream.ToLocalChecked(), 0, data);
-  v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("streamInit").ToLocalChecked());
-  initArgs[0] = v8Stream.ToLocalChecked();
-  Nan::CallAsFunction(Nan::To<v8::Object>(v8Val.ToLocalChecked()).ToLocalChecked(),
-     v8Stream.ToLocalChecked(), 1, initArgs);
+  // v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("streamInit").ToLocalChecked());
+  // initArgs[0] = v8Stream.ToLocalChecked();
+  // Nan::CallAsFunction(Nan::To<v8::Object>(v8Val.ToLocalChecked()).ToLocalChecked(),
+  //    v8Stream.ToLocalChecked(), 1, initArgs);
+  printf("About to set GC callback.\n");
   data->v8Stream.Reset(v8Stream.ToLocalChecked());
   data->v8Stream.SetWeak(data, CleanupStreamData, Nan::WeakCallbackType::kParameter);
   data->v8Stream.MarkIndependent();
 
-  v8Buffer = Nan::To<v8::Object>(Nan::Get(v8Stream.ToLocalChecked(),
-    Nan::New("buffer").ToLocalChecked()).ToLocalChecked());
-  data->buffer = (unsigned char*) node::Buffer::Data(v8Buffer.ToLocalChecked());
-  data->bufferLen = node::Buffer::Length(v8Buffer.ToLocalChecked());
+  // v8Buffer = Nan::To<v8::Object>(Nan::Get(v8Stream.ToLocalChecked(),
+  //   Nan::New("buffer").ToLocalChecked()).ToLocalChecked());
+  // data->buffer = (unsigned char*) node::Buffer::Data(v8Buffer.ToLocalChecked());
+  // data->bufferLen = node::Buffer::Length(v8Buffer.ToLocalChecked());
 
+  printf("About to open stream.\n");
   err = Pa_OpenStream(
     &data->stream,
     NULL, // no input
@@ -174,21 +185,24 @@ NAN_METHOD(Open) {
     argv[0] = Nan::Error(str);
     goto openDone;
   }
-
-  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("write").ToLocalChecked(),
-    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(StreamWrite)).ToLocalChecked());
-  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("writeByte").ToLocalChecked(),
-    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(StreamWriteByte)).ToLocalChecked());
+  data->bufferLen = 6;
+  // Nan::Set(v8Stream.ToLocalChecked(), Nan::New("write").ToLocalChecked(),
+  //   Nan::GetFunction(Nan::New<v8::FunctionTemplate>(StreamWrite)).ToLocalChecked());
+  // Nan::Set(v8Stream.ToLocalChecked(), Nan::New("writeByte").ToLocalChecked(),
+  //   Nan::GetFunction(Nan::New<v8::FunctionTemplate>(StreamWriteByte)).ToLocalChecked());
   Nan::Set(v8Stream.ToLocalChecked(), Nan::New("start").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(StreamStart)).ToLocalChecked());
   Nan::Set(v8Stream.ToLocalChecked(), Nan::New("stop").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(StreamStop)).ToLocalChecked());
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("_write").ToLocalChecked(),
+    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(WritableWrite)).ToLocalChecked());
 
   argv[1] = v8Stream.ToLocalChecked();
 
 openDone:
   cb->Call(2, argv);
   info.GetReturnValue().SetUndefined();
+  printf("Stream opened OK.\n");
 }
 /*
 v8::Handle<v8::Value> Open(const v8::Arguments& args) {
@@ -428,7 +442,7 @@ NAN_METHOD(StreamStart) {
     PaError err = Pa_StartStream(data->stream);
     if(err != paNoError) {
       char str[1000];
-      sprintf(str, "Could not start stream %d", err);
+      sprintf(str, "Could not start stream %s", Pa_GetErrorText(err));
       Nan::ThrowError(str);
     }
   }
@@ -475,6 +489,42 @@ NAN_METHOD(StreamWrite) {
   info.GetReturnValue().SetUndefined();
 }
 
+NAN_METHOD(WritableWrite) {
+  STREAM_DATA;
+  printf("Writability!!! %i\n", data->bufferLen);
+
+  v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
+  int chunkLen = node::Buffer::Length(chunk);
+  unsigned char* p = (unsigned char*) node::Buffer::Data(chunk);
+  printf("The buffer says %s\n", *Nan::Utf8String(info[1].As<v8::String>()));
+  printf("Writability chunk length %i\n", chunkLen);
+  data->writeCallback = new Nan::Callback(info[2].As<v8::Function>());
+  data->bufferLen = chunkLen;
+
+  printf("Set callback to %i->%s.\n", data->writeCallback, *Nan::Utf8String(info[2].As<v8::Function>()));
+
+  data->protectBuffer.Reset(chunk);
+  data->buffer = (unsigned char*) p;
+  data->readIdx = 0;
+  data->writeIdx = chunkLen;
+  data->bufferLen = chunkLen;
+
+  // for ( int i = 0 ; i < bufferLen ; i++ ) {
+  //   if(data->writeIdx == data->readIdx) {
+  //     data->writeCallback = cb;
+  //     i = bufferLen;
+  //   }
+  //
+  //   data->buffer[data->writeIdx++] = *p++;
+  //   if(data->writeIdx >= data->bufferLen) {
+  //     data->writeIdx = 0;
+  //   }
+  // }
+
+  info.GetReturnValue().SetUndefined();
+  printf("Finished Writability!!!\n");
+}
+
 void EIO_EmitUnderrun(uv_work_t* req) {
 
 }
@@ -489,15 +539,26 @@ void EIO_EmitUnderrunAfter(uv_work_t* req) {
     Nan::New(request->v8Stream), 1, emitArgs);
 }
 
+void EIO_WritableCallback(uv_work_t* req) {
+}
+
+void EIO_WritableCallbackAfter(uv_work_t* req) {
+  Nan::HandleScope scope;
+  PortAudioData* request = (PortAudioData*)req->data;
+  printf("CALLBACK!!! %i\n", request->writeCallback);
+  request->writeCallback->Call(0, 0);
+}
+
 static int nodePortAudioCallback(
   const void *inputBuffer,
   void *outputBuffer,
   unsigned long framesPerBuffer,
   const PaStreamCallbackTimeInfo* timeInfo,
   PaStreamCallbackFlags statusFlags,
-  void *userData)
-{
+  void *userData) {
+
   PortAudioData* data = (PortAudioData*)userData;
+
   unsigned long i;
 
   int multiplier = 1;
@@ -517,20 +578,40 @@ static int nodePortAudioCallback(
   }
 
   multiplier = multiplier * data->channelCount;
+  int bytesRequested = ((int) framesPerBuffer) * multiplier;
 
-  unsigned char* out = (unsigned char*)outputBuffer;
-  for(i = 0; i < framesPerBuffer * multiplier; i++) {
-    if(data->readIdx == data->writeIdx) {
-      uv_work_t* req = new uv_work_t();
-      req->data = data;
-      uv_queue_work(uv_default_loop(), req, EIO_EmitUnderrun, (uv_after_work_cb) EIO_EmitUnderrunAfter);
-      return paContinue;
-    }
-    *out++ = data->buffer[data->readIdx++];
-    if(data->readIdx >= data->bufferLen) {
-      data->readIdx = 0;
-    }
+  unsigned char* out = (unsigned char*) outputBuffer;
+  if (data->readIdx + 2 * bytesRequested >= data->bufferLen) {
+    uv_work_t* req = new uv_work_t();
+    req->data = data;
+    printf("data->bufferLen = %i\n", data->bufferLen);
+    uv_queue_work(uv_default_loop(), req, EIO_WritableCallback,
+      (uv_after_work_cb) EIO_WritableCallbackAfter);
+    data->hangoverLen = data->bufferLen % bytesRequested;
+    memcpy(data->hangover, &data->buffer[data->bufferLen - data->hangoverLen],
+      data->hangoverLen);
+    printf("I've a hangover this big %i\n", data->hangoverLen);
   }
+  if (data->hangoverLen > 0) {
+    memcpy(out, &data->hangover, data->hangoverLen);
+    memcpy(out + data->hangoverLen, data->buffer, bytesRequested - data->hangoverLen);
+    data->hangoverLen = 0;
+  } else {
+    memcpy(out, &data->buffer[data->readIdx], framesPerBuffer * multiplier);
+    data->readIdx += framesPerBuffer * multiplier;
+  }
+  // for(i = 0; i < framesPerBuffer * multiplier; i++) {
+  //   if(data->readIdx == data->writeIdx) {
+  //     uv_work_t* req = new uv_work_t();
+  //     req->data = data;
+  //     uv_queue_work(uv_default_loop(), req, EIO_EmitUnderrun, (uv_after_work_cb) EIO_EmitUnderrunAfter);
+  //     return paContinue;
+  //   }
+  //   *out++ = data->buffer[data->readIdx++];
+  //   if(data->readIdx >= data->bufferLen) {
+  //     data->readIdx = 0;
+  //   }
+  // }
 
   return paContinue;
 }
