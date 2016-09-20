@@ -2,7 +2,7 @@
 #include "nodePortAudio.h"
 #include <portaudio.h>
 
-#define FRAMES_PER_BUFFER  (192)
+#define FRAMES_PER_BUFFER  (256)
 
 int g_initialized = false;
 int g_portAudioStreamInitialized = false;
@@ -10,16 +10,18 @@ static Nan::Persistent<v8::Function> streamConstructor;
 
 struct PortAudioData {
   unsigned char* buffer;
-  unsigned char* hangover;
+  unsigned char* nextBuffer;
   int bufferLen;
-  int hangoverLen;
-  int readIdx;
+  int nextLen;
+  int bufferIdx;
+  int nextIdx;
   int writeIdx;
   int sampleFormat;
   int channelCount;
   PaStream* stream;
   Nan::Persistent<v8::Object> v8Stream;
   Nan::Persistent<v8::Object> protectBuffer;
+  Nan::Persistent<v8::Object> protectNext;
   Nan::Callback *writeCallback;
 };
 
@@ -27,7 +29,7 @@ void CleanupStreamData(const Nan::WeakCallbackInfo<PortAudioData> &data) {
   printf("Cleaning up stream data.\n");
   PortAudioData *pad = data.GetParameter();
   Nan::SetInternalFieldPointer(Nan::New(pad->v8Stream), 0, NULL);
-  free(pad->hangover);
+  // free(pad->hangover);
   delete pad;
 }
 
@@ -146,12 +148,11 @@ NAN_METHOD(Open) {
   printf("Sample rate %i\n", sampleRate);
 
   data = new PortAudioData();
-  data->readIdx = 0;
+  data->bufferIdx = 0;
+  data->nextIdx = 0;
   data->writeIdx = 1;
   data->channelCount = outputParameters.channelCount;
   data->sampleFormat = outputParameters.sampleFormat;
-  data->hangover = (unsigned char *) malloc(FRAMES_PER_BUFFER * 4);
-  data->hangoverLen = 0;
 
   v8Stream = Nan::New(streamConstructor)->NewInstance();
   printf("Internal field count is %i\n", argv[1].As<v8::Object>()->InternalFieldCount());
@@ -450,7 +451,7 @@ NAN_METHOD(StreamStart) {
   info.GetReturnValue().SetUndefined();
 }
 
-NAN_METHOD(StreamWriteByte) {
+/* NAN_METHOD(StreamWriteByte) {
   STREAM_DATA;
 
   if (data != NULL) {
@@ -466,9 +467,9 @@ NAN_METHOD(StreamWriteByte) {
   }
 
   info.GetReturnValue().SetUndefined();
-}
+} */
 
-NAN_METHOD(StreamWrite) {
+/* NAN_METHOD(StreamWrite) {
   STREAM_DATA;
 
   v8::Local<v8::Object> buffer = info[0].As<v8::Object>();
@@ -487,45 +488,59 @@ NAN_METHOD(StreamWrite) {
   }
 
   info.GetReturnValue().SetUndefined();
+} */
+
+void EIO_WritableCallback(uv_work_t* req) {
+}
+
+void EIO_WritableCallbackAfter(uv_work_t* req) {
+  Nan::HandleScope scope;
+  PortAudioData* request = (PortAudioData*)req->data;
+  if (request->nextBuffer != NULL) {
+    request->buffer = request->nextBuffer;
+    request->bufferIdx = request->nextIdx;
+    request->protectBuffer.Reset(request->protectNext);
+    request->bufferLen = request->nextLen;
+  }
+  printf("CALLBACK!!! %i\n", request->writeCallback);
+  request->writeCallback->Call(0, 0);
 }
 
 NAN_METHOD(WritableWrite) {
   STREAM_DATA;
   printf("Writability!!! %i\n", data->bufferLen);
 
-  v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
-  int chunkLen = node::Buffer::Length(chunk);
-  unsigned char* p = (unsigned char*) node::Buffer::Data(chunk);
-  printf("The buffer says %s\n", *Nan::Utf8String(info[1].As<v8::String>()));
-  printf("Writability chunk length %i\n", chunkLen);
   data->writeCallback = new Nan::Callback(info[2].As<v8::Function>());
-  data->bufferLen = chunkLen;
-
-  printf("Set callback to %i->%s.\n", data->writeCallback, *Nan::Utf8String(info[2].As<v8::Function>()));
-
-  data->protectBuffer.Reset(chunk);
-  data->buffer = (unsigned char*) p;
-  data->readIdx = 0;
-  data->writeIdx = chunkLen;
-  data->bufferLen = chunkLen;
-
-  // for ( int i = 0 ; i < bufferLen ; i++ ) {
-  //   if(data->writeIdx == data->readIdx) {
-  //     data->writeCallback = cb;
-  //     i = bufferLen;
-  //   }
-  //
-  //   data->buffer[data->writeIdx++] = *p++;
-  //   if(data->writeIdx >= data->bufferLen) {
-  //     data->writeIdx = 0;
-  //   }
-  // }
+  if (data->buffer == NULL) { // Bootstrap
+    printf("Bootstrap!\n");
+    v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
+    int chunkLen = node::Buffer::Length(chunk);
+    unsigned char* p = (unsigned char*) node::Buffer::Data(chunk);
+    Nan::Callback *writeCallback = new Nan::Callback(info[2].As<v8::Function>());
+    data->bufferLen = chunkLen;
+    data->buffer = p;
+    data->bufferIdx = 0;
+    data->protectBuffer.Reset(chunk);
+    uv_work_t* req = new uv_work_t();
+    req->data = data;
+    uv_queue_work(uv_default_loop(), req, EIO_WritableCallback,
+      (uv_after_work_cb) EIO_WritableCallbackAfter);
+  } else {
+    printf("Getting next data.\n");
+    v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
+    int chunkLen = node::Buffer::Length(chunk);
+    unsigned char* p = (unsigned char*) node::Buffer::Data(chunk);
+    data->nextLen = chunkLen;
+    data->nextBuffer = p;
+    data->nextIdx = 0;
+    data->protectNext.Reset(chunk);
+  }
 
   info.GetReturnValue().SetUndefined();
   printf("Finished Writability!!!\n");
 }
 
-void EIO_EmitUnderrun(uv_work_t* req) {
+/*void EIO_EmitUnderrun(uv_work_t* req) {
 
 }
 
@@ -537,17 +552,7 @@ void EIO_EmitUnderrunAfter(uv_work_t* req) {
   emitArgs[0] = Nan::New("underrun").ToLocalChecked();
   Nan::Call(Nan::Get(Nan::New(request->v8Stream), Nan::New("emit").ToLocalChecked()).ToLocalChecked().As<v8::Function>(),
     Nan::New(request->v8Stream), 1, emitArgs);
-}
-
-void EIO_WritableCallback(uv_work_t* req) {
-}
-
-void EIO_WritableCallbackAfter(uv_work_t* req) {
-  Nan::HandleScope scope;
-  PortAudioData* request = (PortAudioData*)req->data;
-  printf("CALLBACK!!! %i\n", request->writeCallback);
-  request->writeCallback->Call(0, 0);
-}
+}*/
 
 static int nodePortAudioCallback(
   const void *inputBuffer,
@@ -581,24 +586,22 @@ static int nodePortAudioCallback(
   int bytesRequested = ((int) framesPerBuffer) * multiplier;
 
   unsigned char* out = (unsigned char*) outputBuffer;
-  if (data->readIdx + 2 * bytesRequested >= data->bufferLen) {
+  if (data->bufferIdx >= data->bufferLen ) { //read from next
+    memcpy(out, data->nextBuffer + data->nextIdx, bytesRequested);
+    data->nextIdx += bytesRequested;
+  } else if (data->bufferIdx + bytesRequested >= data->bufferLen) {
     uv_work_t* req = new uv_work_t();
     req->data = data;
-    printf("data->bufferLen = %i\n", data->bufferLen);
     uv_queue_work(uv_default_loop(), req, EIO_WritableCallback,
       (uv_after_work_cb) EIO_WritableCallbackAfter);
-    data->hangoverLen = data->bufferLen % bytesRequested;
-    memcpy(data->hangover, &data->buffer[data->bufferLen - data->hangoverLen],
-      data->hangoverLen);
-    printf("I've a hangover this big %i\n", data->hangoverLen);
-  }
-  if (data->hangoverLen > 0) {
-    memcpy(out, &data->hangover, data->hangoverLen);
-    memcpy(out + data->hangoverLen, data->buffer, bytesRequested - data->hangoverLen);
-    data->hangoverLen = 0;
-  } else {
-    memcpy(out, &data->buffer[data->readIdx], framesPerBuffer * multiplier);
-    data->readIdx += framesPerBuffer * multiplier;
+    int bytesRemaining = data->bufferLen - data->bufferIdx;
+    memcpy(out, data->buffer + data->bufferIdx, bytesRemaining);
+    memcpy(out + bytesRemaining, data->nextBuffer, bytesRequested - bytesRemaining);
+    data->bufferIdx += bytesRequested;
+    data->nextIdx = bytesRequested - bytesRemaining;
+  } else { // read from buffer
+    memcpy(out, data->buffer + data->bufferIdx, bytesRequested);
+    data->bufferIdx += framesPerBuffer * multiplier;
   }
   // for(i = 0; i < framesPerBuffer * multiplier; i++) {
   //   if(data->readIdx == data->writeIdx) {

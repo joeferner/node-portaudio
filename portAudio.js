@@ -22,17 +22,21 @@ function AudioWriter (opts) {
   opts.sampleFormat = opts.sampleFormat || exports.SampleFormat8Bit;
   opts.sampleRate = opts.sampleRate || 44100;
   // this.on('newListener', console.log.bind(null, 'New listener'));
-  // this.on('audio_ready', console.log.bind(null, 'AUDIO IS READY!!!'));
+  // this.once('audio_ready', function (pa) {
+  //   this.pa = pa;
+  // }.bind(this));
   // console.log('SMELLY EVENTS', this._events);
+  var paud = null;
   portAudioBindings.open(opts, function (err, pa) {
     console.log('Port audio bindings open callback.', err, pa);
     if (err) return console.error(err);
-    this.pa = pa;
+    paud = pa;
     this._write = pa._write.bind(pa);
     // console.log('SETTING PLEASE', this);
     setImmediate(this.emit.bind(this, 'audio_ready', pa));
   }.bind(this));
-  this.pa = null;
+  this.pa = paud;
+  this.on('close', this.pa.stop);
 }
 util.inherits(AudioWriter, Writable);
 
