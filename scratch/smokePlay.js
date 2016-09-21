@@ -1,9 +1,9 @@
 var portAudio = require('../portAudio.js');
 var fs = require('fs');
-var rs = fs.createReadStream('../media/sound/Steam_Engine-John-1826274710.wav');
+var rs = fs.createReadStream('../media/sound/steam_48000.wav', { start : 48000 * 4 * 50 });
 
 // create a sine wave lookup table
-var sampleRate = 44100;
+var sampleRate = 48000;
 
 portAudio.getDevices(function(err, devices) {
   console.log(devices);
@@ -16,13 +16,14 @@ var pw = new portAudio.AudioWriter({
 
 // console.log('pw', pw);
 
+rs.on('close', console.log.bind(null, 'Input stream closing.'));
+
+var to = setTimeout(function () { }, 12345678);
+
 pw.once('audio_ready', function (pa) {
   console.log('Received Audio ready.', this.pa);
   rs.pipe(pw);
-  pa.start();
+  pw.pa.start();
 });
 
-setTimeout(function () {
-  pw.pa.stop();
-  rs.close();
-}, 2000);
+pw.once('finish', function () { clearTimeout(to); });

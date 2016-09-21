@@ -2,7 +2,7 @@
 #include "nodePortAudio.h"
 #include <portaudio.h>
 
-#define FRAMES_PER_BUFFER  (256)
+#define FRAMES_PER_BUFFER  (201)
 
 int g_initialized = false;
 int g_portAudioStreamInitialized = false;
@@ -501,8 +501,10 @@ void EIO_WritableCallbackAfter(uv_work_t* req) {
     request->bufferIdx = request->nextIdx;
     request->protectBuffer.Reset(request->protectNext);
     request->bufferLen = request->nextLen;
+    request->nextLen = 0;
+    printf("Flipped!\n");
   }
-  printf("CALLBACK!!! %i\n", request->writeCallback);
+  printf("CALLBACK!!! %i %i\n", request->writeCallback, request->nextLen);
   request->writeCallback->Call(0, 0);
 }
 
@@ -512,7 +514,6 @@ NAN_METHOD(WritableWrite) {
 
   data->writeCallback = new Nan::Callback(info[2].As<v8::Function>());
   if (data->buffer == NULL) { // Bootstrap
-    printf("Bootstrap!\n");
     v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
     int chunkLen = node::Buffer::Length(chunk);
     unsigned char* p = (unsigned char*) node::Buffer::Data(chunk);
@@ -526,10 +527,10 @@ NAN_METHOD(WritableWrite) {
     uv_queue_work(uv_default_loop(), req, EIO_WritableCallback,
       (uv_after_work_cb) EIO_WritableCallbackAfter);
   } else {
-    printf("Getting next data.\n");
     v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
     int chunkLen = node::Buffer::Length(chunk);
     unsigned char* p = (unsigned char*) node::Buffer::Data(chunk);
+    printf("Next chunk length is %i\n", chunkLen);
     data->nextLen = chunkLen;
     data->nextBuffer = p;
     data->nextIdx = 0;
@@ -587,18 +588,25 @@ static int nodePortAudioCallback(
 
   unsigned char* out = (unsigned char*) outputBuffer;
   if (data->bufferIdx >= data->bufferLen ) { //read from next
+    printf("Reading from next %i.\n", data->nextIdx);
     memcpy(out, data->nextBuffer + data->nextIdx, bytesRequested);
     data->nextIdx += bytesRequested;
   } else if (data->bufferIdx + bytesRequested >= data->bufferLen) {
     uv_work_t* req = new uv_work_t();
     req->data = data;
-    uv_queue_work(uv_default_loop(), req, EIO_WritableCallback,
-      (uv_after_work_cb) EIO_WritableCallbackAfter);
     int bytesRemaining = data->bufferLen - data->bufferIdx;
-    memcpy(out, data->buffer + data->bufferIdx, bytesRemaining);
-    memcpy(out + bytesRemaining, data->nextBuffer, bytesRequested - bytesRemaining);
-    data->bufferIdx += bytesRequested;
-    data->nextIdx = bytesRequested - bytesRemaining;
+    if (data->nextLen > 0) {
+      uv_queue_work(uv_default_loop(), req, EIO_WritableCallback,
+        (uv_after_work_cb) EIO_WritableCallbackAfter);
+      memcpy(out, data->buffer + data->bufferIdx, bytesRemaining);
+      memcpy(out + bytesRemaining, data->nextBuffer, bytesRequested - bytesRemaining);
+      data->bufferIdx += bytesRequested;
+      data->nextIdx = bytesRequested - bytesRemaining;
+    } else {
+      printf("Reached the end of the stream - closing.");
+      memcpy(out, data->buffer + data->bufferIdx, bytesRemaining);
+      return paComplete;
+    }
   } else { // read from buffer
     memcpy(out, data->buffer + data->bufferIdx, bytesRequested);
     data->bufferIdx += framesPerBuffer * multiplier;

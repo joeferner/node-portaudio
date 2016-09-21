@@ -36,7 +36,10 @@ function AudioWriter (opts) {
     setImmediate(this.emit.bind(this, 'audio_ready', pa));
   }.bind(this));
   this.pa = paud;
-  this.on('close', this.pa.stop);
+  this.on('finish', function () {
+    console.log("Closing output stream.");
+    this.pa.stop();
+  });
 }
 util.inherits(AudioWriter, Writable);
 
