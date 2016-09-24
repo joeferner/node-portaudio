@@ -27,7 +27,7 @@
   "author": "Streampunk Media Ltd",
   "license": "Apache-2.0",
   "scripts": {
-    "install": "node-gyp rebuild",
+    "install": "node-gyp rebuild"
   },
   "gypfile": true
 }
