@@ -38,7 +38,7 @@ console.log(portAudio.getDevices());
 
 An example of the output is:
 
-```json
+```javascript
 [ { id: 0,
     name: 'Built-in Microph',
     maxInputChannels: 2,
