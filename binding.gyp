@@ -38,6 +38,29 @@
                 ]
               }
             ]
+          },
+          'OS=="win"', {
+            "configurations": {
+              "Release": {
+                "msvs_settings": {
+                  "VCCLCompilerTool": {
+                    "RuntimeTypeInfo": "true",
+                    "ExceptionHandling": 1
+                  }
+                }
+              }
+            },
+            "libraries": [
+               "-l../portaudio/bin/portaudio_x64.lib"
+            ],
+            "copies": [
+              {
+                "destination": "build/Release",
+                "files": [
+                  "portaudio/bin/portaudio_x64.dll"
+                ]
+              }
+            ]
           }
         ]
       ]
