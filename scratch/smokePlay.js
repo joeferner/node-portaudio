@@ -1,4 +1,4 @@
-var portAudio = require('../portAudio.js');
+var portAudio = require('../index.js');
 var fs = require('fs');
 var rs = fs.createReadStream('../media/sound/steam_48000.wav');
 
