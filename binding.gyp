@@ -61,6 +61,11 @@
                 ]
               }
             ]
+          },
+	  'OS=="linux"', {
+            "libraries": [
+              "-lportaudio"
+            ]
           }
         ]
       ]
