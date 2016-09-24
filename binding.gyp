@@ -1,10 +1,11 @@
 {
   "targets": [
     {
-      "target_name": "portAudio",
+      "target_name": "naudiodon",
       "sources": [
-        "src/binding.cpp",
-        "src/nodePortAudio.cpp"
+        "src/naudiodon.cc",
+        "src/GetDevices.cc",
+        "src/AudioOutput.cc"
       ],
       "include_dirs": [
         "<!(node -e \"require('nan')\")"

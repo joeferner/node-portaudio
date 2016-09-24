@@ -1,41 +1,33 @@
 {
-  "name": "portaudio",
-  "description": "Node bindings for PortAudio",
-  "author": "Joe Ferner <joe.ferner@nearinfinity.com>",
+  "name": "naudiodon",
+  "version": "0.0.4",
+  "description": "Node Stream bindings for PortAudio.",
+  "main": "./index.js",
   "keywords": [
     "portaudio",
     "audio",
-    "raw",
     "play",
+    "record",
     "wav"
   ],
-  "version": "0.0.3",
-  "maintainers": [
-    {
-      "name": "Joe Ferner",
-      "email": "joe.ferner@nearinfinity.com"
-    }
-  ],
   "bugs": {
-    "url": "https://github.com/joeferner/node-portaudio/issues"
+    "url": "https://github.com/Streampunk/naudiodon/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/joeferner/node-portaudio.git"
-  },
-  "engines": {
-    "node": "~0.8.0"
+    "url": "git+https://github.com/Streampunk/naudiodon.git"
   },
   "dependencies": {
-    "bindings": "~1.0.0",
+    "bindings": "^1.2.1",
     "nan": "^2.4.0"
   },
   "devDependencies": {
-    "nodeunit": "~0.7.4"
+    "tape": "^4.5.1"
   },
+  "author": "Streampunk Media Ltd",
+  "license": "Apache-2.0",
   "scripts": {
-    "install": "node-gyp configure build",
-    "test": "./node_modules/.bin/nodeunit test"
+    "install": "node-gyp rebuild",
   },
-  "main": "./portAudio.js"
+  "gypfile": true
 }
