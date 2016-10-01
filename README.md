@@ -93,6 +93,7 @@ var pw = portAudio.AudioWriter({
   deveiceId : 0 }); // Omit the deviceId to select the default device
 
 // Create a stream to pipe into the AudioWriter  
+// Note that this does not strip the WAV header so a click will be heard at the beginning
 var rs = fs.createReadStream('steam_48000.wav');
 
 // Stop the Node.JS process from closing before the clip plays
