@@ -35,7 +35,7 @@ Naudiodon is designed to be `require`d to use from your own application to provi
 To get list of supported devices, call the `getDevices()` function.
 
 ```javascript
-var portAudio = require('portaudio');
+var portAudio = require('naudiodon');
 
 console.log(portAudio.getDevices());
 ```
@@ -82,7 +82,7 @@ Note that the device `id` parameter index value can be used as to specify which 
 Playing audio involves writing or piping audio data to an instance of `AudioWriter`. 
 
 ```javascript
-var portAudio = require('portaudio');
+var portAudio = require('naudiodon');
 var fs = require('fs');
 
 // Create an instance of an AudioWriter, which is a WritableStream
