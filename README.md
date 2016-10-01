@@ -18,9 +18,13 @@ Note: This is a server side library. It is not intended as a means to play and r
 
 Install [Node.js](http://nodejs.org/) for your platform. This software has been developed against the long term stable (LTS) release.
 
-On Linux, please [buiold or install portaudio](http://portaudio.com/download.html) first. This is a temporary measure while the author is experimenting with Linux on different processor architectures. 
+On Linux, please [build or install portaudio](http://portaudio.com/download.html) first. This is a temporary measure while the author is experimenting with Linux on different processor architectures. On a Raspberry Pi running Raspbian, this can be achieved using:
 
-Codecadon is designed to be `require`d to use from your own application to provide async processing.
+```
+sudo apt-get install -y portaudio19-dev
+```
+
+Naudiodon is designed to be `require`d to use from your own application to provide async processing.
 
     npm install --save naudiodon
 
