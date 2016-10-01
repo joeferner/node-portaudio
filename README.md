@@ -86,7 +86,7 @@ var portAudio = require('naudiodon');
 var fs = require('fs');
 
 // Create an instance of an AudioWriter, which is a WritableStream
-var pw = portAudio.AudioWriter({
+var pw = new portAudio.AudioWriter({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
   sampleRate: sampleRate,
