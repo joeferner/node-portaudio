@@ -63,8 +63,22 @@
             ]
           },
 	  'OS=="linux"', {
-            "libraries": [
-              "-lportaudio"
+            "link_settings": {
+              "libraries": [
+                "<@(module_root_dir)/build/Release/libportaudio.so.2"
+              ],
+              "ldflags": [
+              "-L<@(module_root_dir)/build/Release",
+              "-Wl,-rpath,<@(module_root_dir)/build/Release"
+              ]
+            },
+            "copies": [
+              {
+                "destination": "build/Release/",
+                "files": [
+                  "<@(module_root_dir)/portaudio/bin/libportaudio.so.2"
+                ]
+              }
             ]
           }
         ]
