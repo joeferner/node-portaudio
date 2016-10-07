@@ -10,23 +10,19 @@ This is a fork of [node-portaudio](/joeferner/node-portaudio), refactored by:
 
 Little of the original remains but I am very grateful for Joe Ferner for the inspiration and framework to get started.
 
-Only audio writing is curently supported. This library has been tested on MacOS X 10.11, Windows 10 and Raspbian Jessie.
+Only audio writing is curently supported. This library has been tested on MacOS X 10.11, Windows 10, Linux Ubuntu Trusty and Raspbian Jessie (`armhf` architecture).
 
 Note: This is a server side library. It is not intended as a means to play and record audio via a browser.
 
 ## Installation
 
-Install [Node.js](http://nodejs.org/) for your platform. This software has been developed against the long term stable (LTS) release.
+Install [Node.js](http://nodejs.org/) for your platform. This software has been developed against the long term stable (LTS) release. For ease of installation with other node packages, this package includes a copy of the dependent PortAudio library and so has no prerequisites.
 
-On Linux, please [build or install portaudio](http://portaudio.com/download.html) first. This is a temporary measure while the author is experimenting with Linux on different processor architectures. On a Raspberry Pi running Raspbian, this can be achieved using:
-
-```
-sudo apt-get install -y portaudio19-dev
-```
-
-Naudiodon is designed to be `require`d to use from your own application to provide async processing.
+Naudiodon is designed to be `require`d to use from your own application to provide async processing. For example:
 
     npm install --save naudiodon
+
+For Raspberry Pi users, please note that this library is not intended for use with the internal sound card. Please use an external USB sound card or GPIO breakout board such as the [_Pi-DAC+ Full-HD Audio Card_](https://www.modmypi.com/raspberry-pi/breakout-boards/iqaudio/pi-dac-plus-full-hd-audio-card/?tag=pi-dac).
 
 ## Using naudiodon
 
