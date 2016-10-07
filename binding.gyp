@@ -39,6 +39,8 @@
               }
             ]
           },
+        ],
+        [
           'OS=="win"', {
             "configurations": {
               "Release": {
@@ -62,23 +64,48 @@
               }
             ]
           },
-	  'OS=="linux"', {
-            "link_settings": {
-              "libraries": [
-                "<@(module_root_dir)/build/Release/libportaudio.so.2"
-              ],
-              "ldflags": [
-              "-L<@(module_root_dir)/build/Release",
-              "-Wl,-rpath,<@(module_root_dir)/build/Release"
-              ]
-            },
-            "copies": [
-              {
-                "destination": "build/Release/",
-                "files": [
-                  "<@(module_root_dir)/portaudio/bin/libportaudio.so.2"
+        ],
+        [
+          'OS=="linux"', {
+            "conditions": [
+              ['target_arch=="arm"', {
+                "link_settings": {
+                  "libraries": [
+                    "<@(module_root_dir)/build/Release/libportaudio.so.2" 
+                  ],
+                  "ldflags": [
+                    "-L<@(module_root_dir)/build/Release",
+                    "-Wl,-rpath,<@(module_root_dir)/build/Release"
+                  ]
+                },
+                "copies": [
+                  {
+                    "destination": "build/Release/",
+                    "files": [
+                      "<@(module_root_dir)/portaudio/bin_armhf/libportaudio.so.2"
+                    ]
+                  }
                 ]
-              }
+              },
+              { # ia32 or x64
+                "link_settings": {
+                  "libraries": [
+                    "<@(module_root_dir)/build/Release/libportaudio.so.2"
+                  ],
+                  "ldflags": [
+                  "-L<@(module_root_dir)/build/Release",
+                  "-Wl,-rpath,<@(module_root_dir)/build/Release"
+                  ]
+                },
+                "copies": [
+                  {
+                    "destination": "build/Release/",
+                    "files": [
+                      "<@(module_root_dir)/portaudio/bin/libportaudio.so.2"
+                    ]
+                  }
+                ]
+              }]
             ]
           }
         ]
