@@ -16,5 +16,7 @@
 #include <nan.h>
 #include <node_buffer.h>
 #include <cstring>
+#include <signal.h>
+#include "GetDevices.h"
 
 NAN_METHOD(OpenInput);

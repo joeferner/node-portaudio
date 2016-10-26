@@ -13,38 +13,14 @@
   limitations under the License.
 */
 
+#include "common.h"
 #include "AudioOutput.h"
+#include <portaudio.h>
 
-#define FRAMES_PER_BUFFER  (256)
-
-int portAudioStreamInitialized = false;
+int portAudioOutputStreamInitialized = false;
 static Nan::Persistent<v8::Function> streamConstructor;
 
-struct PortAudioData {
-  unsigned char* buffer;
-  unsigned char* nextBuffer;
-  int bufferLen;
-  int nextLen;
-  int bufferIdx;
-  int nextIdx;
-  int writeIdx;
-  int sampleFormat;
-  int channelCount;
-  PaStream* stream;
-  Nan::Persistent<v8::Object> v8Stream;
-  Nan::Persistent<v8::Object> protectBuffer;
-  Nan::Persistent<v8::Object> protectNext;
-  Nan::Callback *writeCallback;
-};
-
-void CleanupStreamData(const Nan::WeakCallbackInfo<PortAudioData> &data) {
-  printf("Cleaning up stream data.\n");
-  PortAudioData *pad = data.GetParameter();
-  Nan::SetInternalFieldPointer(Nan::New(pad->v8Stream), 0, NULL);
-  delete pad;
-}
-
-static int nodePortAudioCallback(
+static int nodePortAudioOutputCallback(
   const void *inputBuffer,
   void *outputBuffer,
   unsigned long framesPerBuffer,
@@ -74,13 +50,13 @@ NAN_METHOD(OpenOutput) {
     return Nan::ThrowError(str);
   }
 
-  if(!portAudioStreamInitialized) {
+  if(!portAudioOutputStreamInitialized) {
     v8::Local<v8::FunctionTemplate> t = Nan::New<v8::FunctionTemplate>();
     t->InstanceTemplate()->SetInternalFieldCount(1);
     t->SetClassName(Nan::New("PortAudioStream").ToLocalChecked());
     streamConstructor.Reset(Nan::GetFunction(t).ToLocalChecked());
 
-    portAudioStreamInitialized = true;
+    portAudioOutputStreamInitialized = true;
   }
 
   memset(&outputParameters, 0, sizeof(PaStreamParameters));
@@ -152,7 +128,7 @@ NAN_METHOD(OpenOutput) {
     sampleRate,
     FRAMES_PER_BUFFER,
     paClipOff, // we won't output out of range samples so don't bother clipping them
-    nodePortAudioCallback,
+    nodePortAudioOutputCallback,
     data);
   if(err != paNoError) {
     sprintf(str, "Could not open stream %s", Pa_GetErrorText(err));
@@ -256,7 +232,7 @@ NAN_METHOD(WritableWrite) {
   info.GetReturnValue().SetUndefined();
 }
 
-static int nodePortAudioCallback(
+static int nodePortAudioOutputCallback(
   const void *inputBuffer,
   void *outputBuffer,
   unsigned long framesPerBuffer,
