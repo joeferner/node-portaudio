@@ -16,7 +16,7 @@
 var util = require("util");
 var EventEmitter = require("events");
 const Writable = require("stream").Writable;
-const Readable = requrie("stream").Readable;
+const Readable = require("stream").Readable;
 var portAudioBindings = require("bindings")("naudiodon.node");
 
 var SegfaultHandler = require('../node-segfault-handler');

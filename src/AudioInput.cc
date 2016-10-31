@@ -23,6 +23,8 @@ int paInputInitialized = false;
 int portAudioInputStreamInitialized = false;
 static Nan::Persistent<v8::Function> streamConstructor;
 unsigned char * buffer[2];
+int halt = false;
+Nan::Callback *testCall;
 
 static int nodePortAudioInputCallback(
   const void *inputBuffer,
@@ -39,9 +41,8 @@ NAN_METHOD(ReadableRead);
 //This method runs on normal program termination, and frees the buffer memory
 void sig_handler(int signo){
   if (signo == SIGINT || signo == SIGTERM){
-    free(buffer[0]);
-    free(buffer[1]);
-    printf("Freed buffers");
+    //free(buffer[0]);
+    halt = true;
   }
 }
 
@@ -129,8 +130,9 @@ NAN_METHOD(OpenInput) {
   data->writeIdx = 1;
   data->channelCount = inputParameters.channelCount;
   data->sampleFormat = inputParameters.sampleFormat;
-  data->writeCallback = new Nan::Callback(info[1].As<v8::Function>());
+  testCall = new Nan::Callback(info[1].As<v8::Function>());
 
+  
   v8Stream = Nan::New(streamConstructor)->NewInstance();
   // printf("Internal field count is %i\n", argv[1].As<v8::Object>()->InternalFieldCount());
   Nan::SetInternalFieldPointer(v8Stream.ToLocalChecked(), 0, data);
@@ -158,7 +160,7 @@ NAN_METHOD(OpenInput) {
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(InputStreamStart)).ToLocalChecked());
   Nan::Set(v8Stream.ToLocalChecked(), Nan::New("inputStop").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(InputStreamStop)).ToLocalChecked());
-  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("_Read").ToLocalChecked(),
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("_read").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(ReadableRead)).ToLocalChecked());
   
   info.GetReturnValue().Set(v8Stream.ToLocalChecked());
@@ -200,7 +202,7 @@ NAN_METHOD(InputStreamStart) {
     PaError err = Pa_StartStream(data->stream);
     if(err != paNoError) {
       char str[1000];
-      sprintf(str, "Could not start stream %s", Pa_GetErrorText(err));
+      sprintf(str, "Could not close stream %s", Pa_GetErrorText(err));
       Nan::ThrowError(str);
     }
   }
@@ -209,18 +211,19 @@ NAN_METHOD(InputStreamStart) {
 }
 
 void ReadableCallback(uv_work_t* req) {
-  
+
 }
 
 //Push data onto the readable stream on the node thread
 void ReadableCallbackAfter(uv_work_t* req) {
+  printf("Callback");
   Nan::HandleScope scope;
   PortAudioData* request = (PortAudioData*)req->data;
   v8::Local<v8::Value> argv[] = {Nan::NewBuffer((char*)request->buffer,request->bufferLen).ToLocalChecked()};
-  request->writeCallback->Call(1,argv);
+  testCall->Call(0,0);
 }
 
-NAN_METHOD(ReadReadable) {
+NAN_METHOD(ReadableRead) {
   info.GetReturnValue().SetUndefined();
 }
 
@@ -234,6 +237,16 @@ static int nodePortAudioInputCallback(
   void *userData) {
 
   PortAudioData* data = (PortAudioData*)userData;
+  
+  if(halt){
+    PaError err = Pa_CloseStream(data->stream);
+    if(err != paNoError) {
+      char str[1000];
+      sprintf(str, "Could not close stream %d", err);
+      Nan::ThrowError(str);
+    }
+    return 0;
+  }
 
   //Calculate size of returned data
   int multiplier = 1;
@@ -258,12 +271,11 @@ static int nodePortAudioInputCallback(
   //First time round, allocate memory to buffers - freed on termination
   if(data->buffer == NULL){
     buffer[0] = (unsigned char *)calloc(1,bytesDelivered);
-    buffer[1] = (unsigned char *)calloc(1,bytesDelivered);
     data->buffer = buffer[0];
-    data->nextBuffer = buffer[1];
   }
 
   //Copy input buffer into local buffers
+  //printf("Copying into data buffer");
   memcpy(data->buffer,inputBuffer,bytesDelivered);
   data->bufferLen = bytesDelivered;
   data->writeIdx = 0;
@@ -272,7 +284,7 @@ static int nodePortAudioInputCallback(
   uv_work_t* req = new uv_work_t();
   req->data = data;
   uv_queue_work(uv_default_loop(),req, ReadableCallback,
-		(uv_after_work_cb) ReadableCallbackAfter);
+  		(uv_after_work_cb) ReadableCallbackAfter);
 
   return paContinue;
 }
