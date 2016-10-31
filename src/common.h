@@ -19,7 +19,7 @@
 #include <portaudio.h>
 
 #ifndef NAUDIODON_COMMON_H
-#define NAUDIODON_COMMPN_H
+#define NAUDIODON_COMMON_H
 
 #define FRAMES_PER_BUFFER  (256)
 

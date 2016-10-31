@@ -130,7 +130,7 @@ NAN_METHOD(OpenInput) {
   data->writeIdx = 1;
   data->channelCount = inputParameters.channelCount;
   data->sampleFormat = inputParameters.sampleFormat;
-  testCall = new Nan::Callback(info[1].As<v8::Function>());
+  data->writeCallback = new Nan::Callback(info[1].As<v8::Function>());
 
   
   v8Stream = Nan::New(streamConstructor)->NewInstance();
@@ -220,7 +220,7 @@ void ReadableCallbackAfter(uv_work_t* req) {
   Nan::HandleScope scope;
   PortAudioData* request = (PortAudioData*)req->data;
   v8::Local<v8::Value> argv[] = {Nan::NewBuffer((char*)request->buffer,request->bufferLen).ToLocalChecked()};
-  testCall->Call(0,0);
+  testCall->Call(1,argv);
 }
 
 NAN_METHOD(ReadableRead) {
