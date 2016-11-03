@@ -186,7 +186,12 @@ NAN_METHOD(StreamStart) {
   info.GetReturnValue().SetUndefined();
 }
 
+NAN_METHOD(SetCallback){
+
+}
+
 void WriteableCallback(uv_work_t* req) {
+  
 }
 
 void WriteableCallbackAfter(uv_work_t* req) {

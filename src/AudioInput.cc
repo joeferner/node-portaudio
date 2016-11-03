@@ -16,8 +16,13 @@
 #include "AudioInput.h"
 #include "common.h"
 #include <portaudio.h>
+#include <queue>
+#include <string>
+#include <iostream>
 
 #define FRAMES_PER_BUFFER  (256)
+
+using namespace std;
 
 int paInputInitialized = false;
 int portAudioInputStreamInitialized = false;
@@ -25,6 +30,8 @@ static Nan::Persistent<v8::Function> streamConstructor;
 unsigned char * buffer[2];
 int halt = false;
 Nan::Callback *testCall;
+queue<string> bufferStack;
+Nan::Persistent<v8::Function> pushCallback;
 
 static int nodePortAudioInputCallback(
   const void *inputBuffer,
@@ -37,14 +44,8 @@ static int nodePortAudioInputCallback(
 NAN_METHOD(InputStreamStart);
 NAN_METHOD(InputStreamStop);
 NAN_METHOD(ReadableRead);
-
-//This method runs on normal program termination, and frees the buffer memory
-void sig_handler(int signo){
-  if (signo == SIGINT || signo == SIGTERM){
-    //free(buffer[0]);
-    halt = true;
-  }
-}
+NAN_METHOD(ItemsAvailable);
+NAN_METHOD(InputSetCallback);
 
 NAN_METHOD(OpenInput) {
   PaError err;
@@ -58,10 +59,6 @@ NAN_METHOD(OpenInput) {
 
   Nan::MaybeLocal<v8::Object> options = Nan::To<v8::Object>(info[0].As<v8::Object>());
 
-  //set up termination signal handling to ensure buffers are free
-  signal(SIGINT,sig_handler);
-  signal(SIGTERM,sig_handler);
-  
   err = EnsureInitialized();
   if(err != paNoError) {
      sprintf(str, "Could not initialize PortAudio: %s", Pa_GetErrorText(err));
@@ -160,8 +157,12 @@ NAN_METHOD(OpenInput) {
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(InputStreamStart)).ToLocalChecked());
   Nan::Set(v8Stream.ToLocalChecked(), Nan::New("inputStop").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(InputStreamStop)).ToLocalChecked());
-  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("_read").ToLocalChecked(),
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("inputRead").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(ReadableRead)).ToLocalChecked());
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("inputItemsAvailable").ToLocalChecked(),
+    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(ItemsAvailable)).ToLocalChecked());
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("inputSetCallback").ToLocalChecked(),
+    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(InputSetCallback)).ToLocalChecked());
   
   info.GetReturnValue().Set(v8Stream.ToLocalChecked());
   printf("Input stream opened OK.\n");
@@ -178,6 +179,12 @@ NAN_METHOD(OpenInput) {
   Nan::Call(Nan::Get(info.This(), Nan::New("emit").ToLocalChecked()).ToLocalChecked().As<v8::Function>(), \
     info.This(), 1, emitArgs);
 
+NAN_METHOD(InputSetCallback){
+  v8::Local<v8::Function> callback = info[0].As<v8::Function>();
+  pushCallback.Reset(callback);
+  cout << "Set callback";
+}
+
 NAN_METHOD(InputStreamStop) {
   INPUT_STREAM_DATA;
 
@@ -192,8 +199,6 @@ NAN_METHOD(InputStreamStop) {
 
   info.GetReturnValue().SetUndefined();
 }
-
-
 
 NAN_METHOD(InputStreamStart) {
   INPUT_STREAM_DATA;
@@ -210,21 +215,51 @@ NAN_METHOD(InputStreamStart) {
   info.GetReturnValue().SetUndefined();
 }
 
+NAN_METHOD(ReadableRead) {
+  //If the buffer is empty return null
+  if(bufferStack.size() == 0){
+    info.GetReturnValue().SetUndefined();
+    return;
+  }
+  
+  //Calculate memory required to transfer entire buffer stack
+  size_t totalMem = bufferStack.front().size();
+
+  /*
+    This memory allocation is not freed in this script, as once
+    this data is passed into nodejs by Nan responsibility for
+    freeing it is passed to nodejs, as per Nan buffer documentation
+  */
+  char * nanTransferBuffer;
+  string pulledBuffer = bufferStack.front();
+  bufferStack.pop();
+  nanTransferBuffer = (char *)calloc(pulledBuffer.size(),sizeof(char));
+  memcpy(nanTransferBuffer,pulledBuffer.data(),pulledBuffer.size());
+
+  //Create the Nan object to be returned
+  info.GetReturnValue().Set(Nan::NewBuffer(nanTransferBuffer,totalMem).ToLocalChecked());
+  
+}
+
+NAN_METHOD(ItemsAvailable){
+  int toReturn = bufferStack.size();
+  info.GetReturnValue().Set(toReturn);
+}
+
 void ReadableCallback(uv_work_t* req) {
 
 }
 
 //Push data onto the readable stream on the node thread
 void ReadableCallbackAfter(uv_work_t* req) {
-  printf("Callback");
   Nan::HandleScope scope;
-  PortAudioData* request = (PortAudioData*)req->data;
-  v8::Local<v8::Value> argv[] = {Nan::NewBuffer((char*)request->buffer,request->bufferLen).ToLocalChecked()};
-  testCall->Call(1,argv);
-}
-
-NAN_METHOD(ReadableRead) {
-  info.GetReturnValue().SetUndefined();
+  if(pushCallback.IsEmpty()){
+    cout << "Failed!";
+    return;
+  }
+  cout << "Callback";
+  Nan::Callback * callback = new Nan::Callback(Nan::New(pushCallback).As<v8::Function>());
+  callback->Call(0,0);
 }
 
 //Port audio calls this every time it has new data to give us
@@ -265,27 +300,16 @@ static int nodePortAudioInputCallback(
     break;
   }
 
+  //Add the frame of audio to the queue
   multiplier = multiplier * data->channelCount;
   int bytesDelivered = ((int) framesPerBuffer) * multiplier;
+  string buffer((char *)inputBuffer,bytesDelivered);
+  bufferStack.push(buffer);
 
-  //First time round, allocate memory to buffers - freed on termination
-  if(data->buffer == NULL){
-    buffer[0] = (unsigned char *)calloc(1,bytesDelivered);
-    data->buffer = buffer[0];
-  }
-
-  //Copy input buffer into local buffers
-  //printf("Copying into data buffer");
-  memcpy(data->buffer,inputBuffer,bytesDelivered);
-  data->bufferLen = bytesDelivered;
-  data->writeIdx = 0;
-
-  //Schedule output to nodejs stream (node is on wrong thread to do it here)
-  uv_work_t* req = new uv_work_t();
-  req->data = data;
+  //Schedule a callback to nodejs
+  uv_work_t * req = new uv_work_t();
   uv_queue_work(uv_default_loop(),req, ReadableCallback,
-  		(uv_after_work_cb) ReadableCallbackAfter);
-
+		(uv_after_work_cb) ReadableCallbackAfter);
+  
   return paContinue;
 }
-

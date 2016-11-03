@@ -49,15 +49,27 @@ function AudioReader (opts) {
   opts.channelCount = opts.channelCount || 2;
   opts.sampleFormat = opts.sampleFormat || exports.SampleFormat8Bit;
   opts.sampleRate = opts.sampleRate || 44100;
-  console.log("this.push: " + typeof(this.push));
+  var localPush = this.push;
+  var reader = this;
   var paud = portAudioBindings.openInput(opts,this.push);
   this.pa = paud;
-  this._read = paud._read.bind(paud);
+  var callback = function(){
+    console.log("Called!");
+      for(i = 0; i < paud.inputItemsAvailable(); i++){
+	reader.push(paud.inputRead());
+	console.log("Push completed");
+      }
+  };
+  this._read = function(){
+    callback.bind(this);
+    this.pa.inputSetCallback(callback);
+    console.log("_read attempted");
+  }.bind(this);
   setImmediate(this.emit.bind(this, 'audio_ready', this.pa));
   this.on('finish', function () {
     console.log("Closing input stream.");
-    this.pa.stop();
-  });  
+    this.pa.inputStop();
+  });
 }
 
 util.inherits(AudioReader, Readable);
