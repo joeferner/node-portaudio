@@ -14,11 +14,6 @@
 */
 
 #include "AudioInput.h"
-#include "common.h"
-#include <portaudio.h>
-#include <queue>
-#include <string>
-#include <iostream>
 
 #define FRAMES_PER_BUFFER  (256)
 
@@ -27,9 +22,6 @@ using namespace std;
 int paInputInitialized = false;
 int portAudioInputStreamInitialized = false;
 static Nan::Persistent<v8::Function> streamConstructor;
-unsigned char * buffer[2];
-int halt = false;
-Nan::Callback *testCall;
 queue<string> bufferStack;
 Nan::Persistent<v8::Function> pushCallback;
 
@@ -122,16 +114,11 @@ NAN_METHOD(OpenInput) {
   sampleRate = Nan::To<int32_t>(v8Val.ToLocalChecked()).FromMaybe(44100);
 
   data = new PortAudioData();
-  data->bufferIdx = 0;
-  data->nextIdx = 0;
-  data->writeIdx = 1;
   data->channelCount = inputParameters.channelCount;
   data->sampleFormat = inputParameters.sampleFormat;
-  data->writeCallback = new Nan::Callback(info[1].As<v8::Function>());
 
   
   v8Stream = Nan::New(streamConstructor)->NewInstance();
-  // printf("Internal field count is %i\n", argv[1].As<v8::Object>()->InternalFieldCount());
   Nan::SetInternalFieldPointer(v8Stream.ToLocalChecked(), 0, data);
 
   data->v8Stream.Reset(v8Stream.ToLocalChecked());
@@ -165,7 +152,6 @@ NAN_METHOD(OpenInput) {
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(InputSetCallback)).ToLocalChecked());
   
   info.GetReturnValue().Set(v8Stream.ToLocalChecked());
-  printf("Input stream opened OK.\n");
 }
 
 
@@ -182,7 +168,6 @@ NAN_METHOD(OpenInput) {
 NAN_METHOD(InputSetCallback){
   v8::Local<v8::Function> callback = info[0].As<v8::Function>();
   pushCallback.Reset(callback);
-  cout << "Set callback";
 }
 
 NAN_METHOD(InputStreamStop) {
@@ -254,15 +239,16 @@ void ReadableCallback(uv_work_t* req) {
 void ReadableCallbackAfter(uv_work_t* req) {
   Nan::HandleScope scope;
   if(pushCallback.IsEmpty()){
-    cout << "Failed!";
+    char str[1000];
+    sprintf(str,"Push callback returned empty");
+    Nan::ThrowError(str);
     return;
   }
-  cout << "Callback";
   Nan::Callback * callback = new Nan::Callback(Nan::New(pushCallback).As<v8::Function>());
   callback->Call(0,0);
 }
 
-//Port audio calls this every time it has new data to give us
+//Port audio calls tis every time it has new data to give us
 static int nodePortAudioInputCallback(
   const void *inputBuffer,
   void *outputBuffer,
@@ -272,16 +258,6 @@ static int nodePortAudioInputCallback(
   void *userData) {
 
   PortAudioData* data = (PortAudioData*)userData;
-  
-  if(halt){
-    PaError err = Pa_CloseStream(data->stream);
-    if(err != paNoError) {
-      char str[1000];
-      sprintf(str, "Could not close stream %d", err);
-      Nan::ThrowError(str);
-    }
-    return 0;
-  }
 
   //Calculate size of returned data
   int multiplier = 1;

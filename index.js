@@ -51,19 +51,16 @@ function AudioReader (opts) {
   opts.sampleRate = opts.sampleRate || 44100;
   var localPush = this.push;
   var reader = this;
-  var paud = portAudioBindings.openInput(opts,this.push);
+  var paud = portAudioBindings.openInput(opts);
   this.pa = paud;
   var callback = function(){
-    console.log("Called!");
       for(i = 0; i < paud.inputItemsAvailable(); i++){
 	reader.push(paud.inputRead());
-	console.log("Push completed");
       }
   };
   this._read = function(){
     callback.bind(this);
     this.pa.inputSetCallback(callback);
-    console.log("_read attempted");
   }.bind(this);
   setImmediate(this.emit.bind(this, 'audio_ready', this.pa));
   this.on('finish', function () {
