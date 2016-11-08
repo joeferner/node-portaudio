@@ -10,7 +10,7 @@ This is a fork of [node-portaudio](/joeferner/node-portaudio), refactored by:
 
 Little of the original remains but I am very grateful for Joe Ferner for the inspiration and framework to get started.
 
-Only audio writing is curently supported. This library has been tested on MacOS X 10.11, Windows 10, Linux Ubuntu Trusty and Raspbian Jessie (`armhf` architecture).
+This library has been tested on MacOS X 10.11, Windows 10, Linux Ubuntu Trusty and Raspbian Jessie (`armhf` architecture).
 
 Note: This is a server side library. It is not intended as a means to play and record audio via a browser.
 
@@ -162,7 +162,7 @@ and provide them with a fix.
 
 ## Status, support and further development
 
-Recording of audio is not yet supported. Optimisation is still required for use with lower specification devices, such as Raspberry Pis.
+Optimisation is still required for use with lower specification devices, such as Raspberry Pis.
 
 Although the architecture of naudiodon is such that it could be used at scale in production environments, development is not yet complete. In its current state, it is recommended that this software is used in development environments and for building prototypes. Future development will make this more appropriate for production use.
 
