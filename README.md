@@ -109,7 +109,37 @@ To stop the stream early, close the piped input or call `pw.pa.stop()`.
 
 ### Recording audio
 
-To follow.
+Recording audio invovles reading from an instance of `AudioReader`.
+
+```javascript
+var portAudio = require('../index.js');
+var fs = require('fs');
+
+//Create a new instance of Audio Reader, which is a ReadableStream
+var pr = new portAudio.AudioReader({
+  channelCount: 2,
+  sampleFormat: portAudio.SampleFormat16Bit,
+  sampleRate: 44100,
+});
+
+//Create a write stream to write out to a raw audio file
+var ws = fs.createWriteStream('rawAudio.raw');
+
+//Set a timeout
+var to = setTimeout(function(){ },12345678);
+
+//Start streaming
+pr.once('audio_ready', function(pa) {
+  pr.pipe(ws);
+  pr.pa.inputStart();
+});
+
+//Clear timeout
+pr.once('finish',function() {clearTimeout(to); });
+
+```
+
+Note that this produces a raw audio file - wav headers would be required to create a wav file. However this basic example produces a file may be read by audio software such as Audacity, using the sample rate and format parameters set when establishing the stream.
 
 ## Troubleshooting
 
