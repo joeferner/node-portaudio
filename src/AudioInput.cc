@@ -21,6 +21,7 @@ using namespace std;
 
 int paInputInitialized = false;
 int portAudioInputStreamInitialized = false;
+int enablePush = false;
 static Nan::Persistent<v8::Function> streamConstructor;
 queue<string> bufferStack;
 Nan::Persistent<v8::Function> pushCallback;
@@ -39,6 +40,7 @@ NAN_METHOD(InputStreamStop);
 NAN_METHOD(ReadableRead);
 NAN_METHOD(ItemsAvailable);
 NAN_METHOD(InputSetCallback);
+NAN_METHOD(DisablePush);
 
 NAN_METHOD(OpenInput) {
   PaError err;
@@ -151,6 +153,8 @@ NAN_METHOD(OpenInput) {
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(ItemsAvailable)).ToLocalChecked());
   Nan::Set(v8Stream.ToLocalChecked(), Nan::New("inputSetCallback").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(InputSetCallback)).ToLocalChecked());
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("disablePush").ToLocalChecked(),
+    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(DisablePush)).ToLocalChecked());
   
   info.GetReturnValue().Set(v8Stream.ToLocalChecked());
 }
@@ -169,6 +173,7 @@ NAN_METHOD(OpenInput) {
 NAN_METHOD(InputSetCallback){
   v8::Local<v8::Function> callback = info[0].As<v8::Function>();
   pushCallback.Reset(callback);
+  enablePush = true;
 }
 
 NAN_METHOD(InputStreamStop) {
@@ -225,13 +230,16 @@ NAN_METHOD(ReadableRead) {
   memcpy(nanTransferBuffer,pulledBuffer.data(),pulledBuffer.size());
 
   //Create the Nan object to be returned
-  info.GetReturnValue().Set(Nan::NewBuffer(nanTransferBuffer,totalMem).ToLocalChecked());
-  
+  info.GetReturnValue().Set(Nan::NewBuffer(nanTransferBuffer,totalMem).ToLocalChecked());  
 }
 
 NAN_METHOD(ItemsAvailable){
   int toReturn = bufferStack.size();
   info.GetReturnValue().Set(toReturn);
+}
+
+NAN_METHOD(DisablePush){
+  enablePush = false;
 }
 
 void ReadableCallback(uv_work_t* req) {
@@ -247,8 +255,10 @@ void ReadableCallbackAfter(uv_work_t* req) {
     Nan::ThrowError(str);
     return;
   }
-  Nan::Callback * callback = new Nan::Callback(Nan::New(pushCallback).As<v8::Function>());
-  callback->Call(0,0);
+  if(enablePush){
+    Nan::Callback * callback = new Nan::Callback(Nan::New(pushCallback).As<v8::Function>());
+    callback->Call(0,0);
+  }
 }
 
 //Port audio calls tis every time it has new data to give us

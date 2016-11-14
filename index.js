@@ -54,9 +54,14 @@ function AudioReader (opts) {
   var paud = portAudioBindings.openInput(opts);
   this.pa = paud;
   var callback = function(){
-      for(i = 0; i < paud.inputItemsAvailable(); i++){
-	reader.push(paud.inputRead());
-      }
+    pushAccepted = true;
+    while(pushAccepted && paud.inputItemsAvailable() > 0){
+      pushAccepted = reader.push(paud.inputRead());
+    }
+    //Prevent any further pushes until _read() is next called
+    if(!pushAccepted){
+      paud.disablePush();
+    }
   };
   this._read = function(){
     callback.bind(this);
