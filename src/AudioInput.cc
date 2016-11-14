@@ -24,6 +24,7 @@ int portAudioInputStreamInitialized = false;
 static Nan::Persistent<v8::Function> streamConstructor;
 queue<string> bufferStack;
 Nan::Persistent<v8::Function> pushCallback;
+pthread_mutex_t lock;
 
 static int nodePortAudioInputCallback(
   const void *inputBuffer,
@@ -216,8 +217,10 @@ NAN_METHOD(ReadableRead) {
     freeing it is passed to nodejs, as per Nan buffer documentation
   */
   char * nanTransferBuffer;
+  pthread_mutex_lock(&lock);
   string pulledBuffer = bufferStack.front();
   bufferStack.pop();
+  pthread_mutex_unlock(&lock);
   nanTransferBuffer = (char *)calloc(pulledBuffer.size(),sizeof(char));
   memcpy(nanTransferBuffer,pulledBuffer.data(),pulledBuffer.size());
 
@@ -280,8 +283,9 @@ static int nodePortAudioInputCallback(
   multiplier = multiplier * data->channelCount;
   int bytesDelivered = ((int) framesPerBuffer) * multiplier;
   string buffer((char *)inputBuffer,bytesDelivered);
+  pthread_mutex_lock(&lock);
   bufferStack.push(buffer);
-
+  pthread_mutex_unlock(&lock);
   //Schedule a callback to nodejs
   uv_work_t * req = new uv_work_t();
   uv_queue_work(uv_default_loop(),req, ReadableCallback,
