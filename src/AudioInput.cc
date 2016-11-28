@@ -26,6 +26,7 @@ static Nan::Persistent<v8::Function> streamConstructor;
 queue<string> bufferStack;
 Nan::Persistent<v8::Function> pushCallback;
 pthread_mutex_t lock;
+uv_async_t *req;
 
 static int nodePortAudioInputCallback(
   const void *inputBuffer,
@@ -34,6 +35,8 @@ static int nodePortAudioInputCallback(
   const PaStreamCallbackTimeInfo* timeInfo,
   PaStreamCallbackFlags statusFlags,
   void *userData);
+
+void ReadableCallback(uv_async_t* req);
 
 NAN_METHOD(InputStreamStart);
 NAN_METHOD(InputStreamStop);
@@ -54,6 +57,9 @@ NAN_METHOD(OpenInput) {
 
   Nan::MaybeLocal<v8::Object> options = Nan::To<v8::Object>(info[0].As<v8::Object>());
 
+  req = new uv_async_t;
+  uv_async_init(uv_default_loop(),req,ReadableCallback);
+  
   err = EnsureInitialized();
   if(err != paNoError) {
      sprintf(str, "Could not initialize PortAudio: %s", Pa_GetErrorText(err));
@@ -157,6 +163,7 @@ NAN_METHOD(OpenInput) {
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(DisablePush)).ToLocalChecked());
   
   info.GetReturnValue().Set(v8Stream.ToLocalChecked());
+
 }
 
 
@@ -230,7 +237,7 @@ NAN_METHOD(ReadableRead) {
   memcpy(nanTransferBuffer,pulledBuffer.data(),pulledBuffer.size());
 
   //Create the Nan object to be returned
-  info.GetReturnValue().Set(Nan::NewBuffer(nanTransferBuffer,totalMem).ToLocalChecked());  
+  info.GetReturnValue().Set(Nan::NewBuffer(nanTransferBuffer,totalMem).ToLocalChecked());
 }
 
 NAN_METHOD(ItemsAvailable){
@@ -242,12 +249,8 @@ NAN_METHOD(DisablePush){
   enablePush = false;
 }
 
-void ReadableCallback(uv_work_t* req) {
-
-}
-
 //Push data onto the readable stream on the node thread
-void ReadableCallbackAfter(uv_work_t* req) {
+void ReadableCallback(uv_async_t* req) {
   Nan::HandleScope scope;
   if(pushCallback.IsEmpty()){
     char str[1000];
@@ -297,9 +300,13 @@ static int nodePortAudioInputCallback(
   bufferStack.push(buffer);
   pthread_mutex_unlock(&lock);
   //Schedule a callback to nodejs
-  uv_work_t * req = new uv_work_t();
-  uv_queue_work(uv_default_loop(),req, ReadableCallback,
-		(uv_after_work_cb) ReadableCallbackAfter);
+
+
+  uv_async_send(req);
+  int ret = 0;
+  if(ret < 0){
+    cerr << "Got uv async return code of " << ret;
+  }
   
   return paContinue;
 }

@@ -19,8 +19,8 @@ const Writable = require("stream").Writable;
 const Readable = require("stream").Readable;
 var portAudioBindings = require("bindings")("naudiodon.node");
 
-var SegfaultHandler = require('../node-segfault-handler');
-SegfaultHandler.registerHandler("crash.log");
+//var SegfaultHandler = require('../node-segfault-handler');
+//SegfaultHandler.registerHandler("crash.log");
 
 exports.SampleFormat8Bit = 8;
 exports.SampleFormat16Bit = 16;
