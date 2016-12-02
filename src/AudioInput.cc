@@ -25,7 +25,7 @@ int enablePush = false;
 static Nan::Persistent<v8::Function> streamConstructor;
 queue<string> bufferStack;
 Nan::Persistent<v8::Function> pushCallback;
-pthread_mutex_t lock;
+uv_mutex_t padlock;
 uv_async_t *req;
 
 static int nodePortAudioInputCallback(
@@ -59,6 +59,7 @@ NAN_METHOD(OpenInput) {
 
   req = new uv_async_t;
   uv_async_init(uv_default_loop(),req,ReadableCallback);
+  uv_mutex_init(&padlock);
   
   err = EnsureInitialized();
   if(err != paNoError) {
@@ -77,7 +78,7 @@ NAN_METHOD(OpenInput) {
 
   memset(&inputParameters, 0, sizeof(PaStreamParameters));
 
-  v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("deviceId").ToLocalChecked());
+  v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("device").ToLocalChecked());
   int deviceId = (v8Val.ToLocalChecked()->IsUndefined()) ? -1 :
     Nan::To<int32_t>(v8Val.ToLocalChecked()).FromMaybe(-1);
   if ((deviceId >= 0) && (deviceId < Pa_GetDeviceCount())) {
@@ -229,10 +230,10 @@ NAN_METHOD(ReadableRead) {
     freeing it is passed to nodejs, as per Nan buffer documentation
   */
   char * nanTransferBuffer;
-  pthread_mutex_lock(&lock);
+  uv_mutex_lock(&padlock);
   string pulledBuffer = bufferStack.front();
   bufferStack.pop();
-  pthread_mutex_unlock(&lock);
+  uv_mutex_unlock(&padlock);
   nanTransferBuffer = (char *)calloc(pulledBuffer.size(),sizeof(char));
   memcpy(nanTransferBuffer,pulledBuffer.data(),pulledBuffer.size());
 
@@ -296,9 +297,9 @@ static int nodePortAudioInputCallback(
   multiplier = multiplier * data->channelCount;
   int bytesDelivered = ((int) framesPerBuffer) * multiplier;
   string buffer((char *)inputBuffer,bytesDelivered);
-  pthread_mutex_lock(&lock);
+  uv_mutex_lock(&padlock);
   bufferStack.push(buffer);
-  pthread_mutex_unlock(&lock);
+  uv_mutex_unlock(&padlock);
   //Schedule a callback to nodejs
 
 

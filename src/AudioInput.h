@@ -21,7 +21,6 @@
 #include <queue>
 #include <string>
 #include <iostream>
-#include <pthread.h>
 #include "GetDevices.h"
 #include "common.h"
 

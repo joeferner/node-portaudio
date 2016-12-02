@@ -49,6 +49,7 @@ function AudioReader (opts) {
   opts.channelCount = opts.channelCount || 2;
   opts.sampleFormat = opts.sampleFormat || exports.SampleFormat8Bit;
   opts.sampleRate = opts.sampleRate || 44100;
+  opts.device = opts.device || -1;
   var localPush = this.push;
   var reader = this;
   var paud = portAudioBindings.openInput(opts);
