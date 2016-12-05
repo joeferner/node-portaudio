@@ -17,8 +17,13 @@
 #include "AudioOutput.h"
 #include <portaudio.h>
 
+using namespace std;
 int portAudioOutputStreamInitialized = false;
 static Nan::Persistent<v8::Function> streamConstructor;
+queue<string> outBufferStack;
+string currentChunk;
+unsigned int currentChunkIdx;
+uv_mutex_t outlock;
 
 static int nodePortAudioOutputCallback(
   const void *inputBuffer,
@@ -44,6 +49,8 @@ NAN_METHOD(OpenOutput) {
 
   Nan::MaybeLocal<v8::Object> options = Nan::To<v8::Object>(info[0].As<v8::Object>());
 
+  uv_mutex_init(&outlock);
+  
   err = EnsureInitialized();
   if(err != paNoError) {
     sprintf(str, "Could not initialize PortAudio: %s", Pa_GetErrorText(err));
@@ -190,11 +197,7 @@ NAN_METHOD(SetCallback){
 
 }
 
-void WriteableCallback(uv_work_t* req) {
-  
-}
-
-void WriteableCallbackAfter(uv_work_t* req) {
+void WriteableCallback(uv_async_t* req) {
   Nan::HandleScope scope;
   PortAudioData* request = (PortAudioData*)req->data;
   if (request->nextBuffer != NULL) {
@@ -209,30 +212,14 @@ void WriteableCallbackAfter(uv_work_t* req) {
 }
 
 NAN_METHOD(WritableWrite) {
-  STREAM_DATA;
-
-  data->writeCallback = new Nan::Callback(info[2].As<v8::Function>());
-  if (data->buffer == NULL) { // Bootstrap
-    v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
-    int chunkLen = node::Buffer::Length(chunk);
-    unsigned char* p = (unsigned char*) node::Buffer::Data(chunk);
-    data->bufferLen = chunkLen;
-    data->buffer = p;
-    data->bufferIdx = 0;
-    data->protectBuffer.Reset(chunk);
-    uv_work_t* req = new uv_work_t();
-    req->data = data;
-    uv_queue_work(uv_default_loop(), req, WriteableCallback,
-      (uv_after_work_cb) WriteableCallbackAfter);
-  } else {
-    v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
-    int chunkLen = node::Buffer::Length(chunk);
-    unsigned char* p = (unsigned char*) node::Buffer::Data(chunk);
-    data->nextLen = chunkLen;
-    data->nextBuffer = p;
-    data->nextIdx = 0;
-    data->protectNext.Reset(chunk);
-  }
+  Nan::Callback *writeCallback = new Nan::Callback(info[2].As<v8::Function>());
+  v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
+  int chunkLen = node::Buffer::Length(chunk);
+  string buffer((char *)node::Buffer::Data(chunk),chunkLen);
+  uv_mutex_lock(&outlock);
+  outBufferStack.push(buffer);
+  uv_mutex_unlock(&outlock);
+  writeCallback->Call(0, 0);
 
   info.GetReturnValue().SetUndefined();
 }
@@ -267,29 +254,33 @@ static int nodePortAudioOutputCallback(
   int bytesRequested = ((int) framesPerBuffer) * multiplier;
 
   unsigned char* out = (unsigned char*) outputBuffer;
-  if (data->bufferIdx >= data->bufferLen ) { //read from next
-    // printf("Reading from next %i.\n", data->nextIdx);
-    memcpy(out, data->nextBuffer + data->nextIdx, bytesRequested);
-    data->nextIdx += bytesRequested;
-  } else if (data->bufferIdx + bytesRequested >= data->bufferLen) {
-    uv_work_t* req = new uv_work_t();
-    req->data = data;
-    int bytesRemaining = data->bufferLen - data->bufferIdx;
-    if (data->nextLen > 0) {
-      uv_queue_work(uv_default_loop(), req, WriteableCallback,
-        (uv_after_work_cb) WriteableCallbackAfter);
-      memcpy(out, data->buffer + data->bufferIdx, bytesRemaining);
-      memcpy(out + bytesRemaining, data->nextBuffer, bytesRequested - bytesRemaining);
-      data->bufferIdx += bytesRequested;
-      data->nextIdx = bytesRequested - bytesRemaining;
+  if (currentChunkIdx >= currentChunk.length() ) { //read from next
+    uv_mutex_lock(&outlock);
+    if(outBufferStack.size() > 0){
+      currentChunk = outBufferStack.front();
+      outBufferStack.pop();
+    }
+    uv_mutex_unlock(&outlock);
+    currentChunkIdx = bytesRequested;
+    memcpy(out, currentChunk.data() + bytesRequested, bytesRequested);
+  } else if (currentChunkIdx + bytesRequested >= currentChunk.length()) {
+    int bytesRemaining = currentChunk.length() - currentChunkIdx;
+    uv_mutex_lock(&outlock);
+    if (outBufferStack.size() > 0) {
+      memcpy(out, currentChunk.data() + currentChunkIdx, bytesRemaining);
+      currentChunk = outBufferStack.front();
+      outBufferStack.pop();
+      memcpy(out + bytesRemaining, currentChunk.data(), bytesRequested - bytesRemaining);
+      currentChunkIdx = bytesRequested - bytesRemaining;
     } else {
       printf("Reached the end of the stream - closing.");
-      memcpy(out, data->buffer + data->bufferIdx, bytesRemaining);
+      memcpy(out, currentChunk.data() + currentChunkIdx, bytesRemaining);
       return paComplete;
     }
+    uv_mutex_unlock(&outlock);
   } else { // read from buffer
-    memcpy(out, data->buffer + data->bufferIdx, bytesRequested);
-    data->bufferIdx += framesPerBuffer * multiplier;
+    memcpy(out, currentChunk.data() + currentChunkIdx, bytesRequested);
+    currentChunkIdx += framesPerBuffer * multiplier;
   }
 
   return paContinue;

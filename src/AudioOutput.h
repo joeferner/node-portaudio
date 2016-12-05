@@ -16,6 +16,8 @@
 #include <nan.h>
 #include <node_buffer.h>
 #include <cstring>
+#include <queue>
+#include <string>
 #include "GetDevices.h"
 
 NAN_METHOD(OpenOutput);
