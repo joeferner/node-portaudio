@@ -16,8 +16,30 @@
 #include <nan.h>
 #include <node_buffer.h>
 #include <cstring>
-#include <queue>
-#include <string>
-#include "GetDevices.h"
+#include <portaudio.h>
 
-NAN_METHOD(OpenOutput);
+#ifndef NAUDIODON_COMMON_H
+#define NAUDIODON_COMMON_H
+
+#define FRAMES_PER_BUFFER  (256)
+
+struct PortAudioData {
+  unsigned char* buffer;
+  unsigned char* nextBuffer;
+  int bufferLen;
+  int nextLen;
+  int bufferIdx;
+  int nextIdx;
+  int writeIdx;
+  int sampleFormat;
+  int channelCount;
+  PaStream* stream;
+  Nan::Persistent<v8::Object> v8Stream;
+  Nan::Persistent<v8::Object> protectBuffer;
+  Nan::Persistent<v8::Object> protectNext;
+  Nan::Callback *writeCallback;
+};
+
+void CleanupStreamData(const Nan::WeakCallbackInfo<PortAudioData> &data);
+
+#endif

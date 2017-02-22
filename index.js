@@ -16,10 +16,11 @@
 var util = require("util");
 var EventEmitter = require("events");
 const Writable = require("stream").Writable;
+const Readable = require("stream").Readable;
 var portAudioBindings = require("bindings")("naudiodon.node");
 
-// var SegfaultHandler = require('../node-segfault-handler');
-// SegfaultHandler.registerHandler("crash.log");
+//var SegfaultHandler = require('../node-segfault-handler');
+//SegfaultHandler.registerHandler("crash.log");
 
 exports.SampleFormat8Bit = 8;
 exports.SampleFormat16Bit = 16;
@@ -41,7 +42,40 @@ function AudioWriter (opts) {
   });
 }
 util.inherits(AudioWriter, Writable);
-
 exports.AudioWriter = AudioWriter;
+
+function AudioReader (opts) {
+  Readable.call(this);
+  opts.channelCount = opts.channelCount || 2;
+  opts.sampleFormat = opts.sampleFormat || exports.SampleFormat8Bit;
+  opts.sampleRate = opts.sampleRate || 44100;
+  opts.device = opts.device || -1;
+  var localPush = this.push;
+  var reader = this;
+  var paud = portAudioBindings.openInput(opts);
+  this.pa = paud;
+  var callback = function(){
+    pushAccepted = true;
+    while(pushAccepted && paud.inputItemsAvailable() > 0){
+      pushAccepted = reader.push(paud.inputRead());
+    }
+    //Prevent any further pushes until _read() is next called
+    if(!pushAccepted){
+      paud.disablePush();
+    }
+  };
+  this._read = function(){
+    callback.bind(this);
+    this.pa.inputSetCallback(callback);
+  }.bind(this);
+  setImmediate(this.emit.bind(this, 'audio_ready', this.pa));
+  this.on('finish', function () {
+    console.log("Closing input stream.");
+    this.pa.inputStop();
+  });
+}
+
+util.inherits(AudioReader, Readable);
+exports.AudioReader = AudioReader;
 
 exports.getDevices = portAudioBindings.getDevices;

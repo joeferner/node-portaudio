@@ -13,11 +13,20 @@
   limitations under the License.
 */
 
-#include <nan.h>
-#include <node_buffer.h>
-#include <cstring>
-#include <queue>
-#include <string>
-#include "GetDevices.h"
+/*
+   This file contains code that is common between audio input and output
+ */
 
-NAN_METHOD(OpenOutput);
+#include "common.h"
+
+#ifndef NAUDIODON_COMMON
+#define NAUDIODON_COMMON
+
+void CleanupStreamData(const Nan::WeakCallbackInfo<PortAudioData> &data) {
+  printf("Cleaning up stream data.\n");
+  PortAudioData *pad = data.GetParameter();
+  Nan::SetInternalFieldPointer(Nan::New(pad->v8Stream), 0, NULL);
+  delete pad;
+}
+
+#endif

@@ -15,7 +15,7 @@
 
 var portAudio = require('../index.js');
 var fs = require('fs');
-var rs = fs.createReadStream('../media/sound/steam_48000.wav');
+var rs = fs.createReadStream('test.wav');
 
 // create a sine wave lookup table
 var sampleRate = 48000;

@@ -16,5 +16,12 @@
 #include <nan.h>
 #include <node_buffer.h>
 #include <cstring>
+#include <signal.h>
+#include <portaudio.h>
+#include <queue>
+#include <string>
+#include <iostream>
+#include "GetDevices.h"
+#include "common.h"
 
 NAN_METHOD(OpenInput);
