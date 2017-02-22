@@ -1,4 +1,4 @@
-/* Copyright 2016 Streampunk Media Ltd.
+/* Copyright 2017 Streampunk Media Ltd.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -127,8 +127,7 @@ NAN_METHOD(OpenInput) {
   data->channelCount = inputParameters.channelCount;
   data->sampleFormat = inputParameters.sampleFormat;
 
-  
-  v8Stream = Nan::New(streamConstructor)->NewInstance();
+  v8Stream = Nan::New(streamConstructor)->NewInstance(Nan::GetCurrentContext()).ToLocalChecked();
   Nan::SetInternalFieldPointer(v8Stream.ToLocalChecked(), 0, data);
 
   data->v8Stream.Reset(v8Stream.ToLocalChecked());
@@ -238,11 +237,11 @@ NAN_METHOD(ReadableRead) {
   memcpy(nanTransferBuffer,pulledBuffer.data(),pulledBuffer.size());
 
   //Create the Nan object to be returned
-  info.GetReturnValue().Set(Nan::NewBuffer(nanTransferBuffer,totalMem).ToLocalChecked());
+  info.GetReturnValue().Set(Nan::NewBuffer(nanTransferBuffer,(uint32_t)totalMem).ToLocalChecked());
 }
 
 NAN_METHOD(ItemsAvailable){
-  int toReturn = bufferStack.size();
+  int toReturn = (int)bufferStack.size();
   info.GetReturnValue().Set(toReturn);
 }
 

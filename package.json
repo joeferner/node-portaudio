@@ -1,6 +1,6 @@
 {
   "name": "naudiodon",
-  "version": "0.0.21",
+  "version": "0.1.0",
   "description": "Node Stream bindings for PortAudio.",
   "main": "./index.js",
   "keywords": [
@@ -20,10 +20,10 @@
   },
   "dependencies": {
     "bindings": "^1.2.1",
-    "nan": "^2.4.0"
+    "nan": "^2.5.1"
   },
   "devDependencies": {
-    "tape": "^4.5.1"
+    "tape": "^4.6.3"
   },
   "author": "Streampunk Media Ltd",
   "license": "Apache-2.0",

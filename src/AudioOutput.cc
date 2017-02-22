@@ -1,4 +1,4 @@
-/* Copyright 2016 Streampunk Media Ltd.
+/* Copyright 2017 Streampunk Media Ltd.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -120,7 +120,7 @@ NAN_METHOD(OpenOutput) {
   data->channelCount = outputParameters.channelCount;
   data->sampleFormat = outputParameters.sampleFormat;
 
-  v8Stream = Nan::New(streamConstructor)->NewInstance();
+  v8Stream = Nan::New(streamConstructor)->NewInstance(Nan::GetCurrentContext()).ToLocalChecked();
   // printf("Internal field count is %i\n", argv[1].As<v8::Object>()->InternalFieldCount());
   Nan::SetInternalFieldPointer(v8Stream.ToLocalChecked(), 0, data);
 
@@ -214,7 +214,7 @@ void WriteableCallback(uv_async_t* req) {
 NAN_METHOD(WritableWrite) {
   Nan::Callback *writeCallback = new Nan::Callback(info[2].As<v8::Function>());
   v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
-  int chunkLen = node::Buffer::Length(chunk);
+  int chunkLen = (int)node::Buffer::Length(chunk);
   string buffer((char *)node::Buffer::Data(chunk),chunkLen);
   uv_mutex_lock(&outlock);
   outBufferStack.push(buffer);
@@ -264,7 +264,7 @@ static int nodePortAudioOutputCallback(
     currentChunkIdx = bytesRequested;
     memcpy(out, currentChunk.data() + bytesRequested, bytesRequested);
   } else if (currentChunkIdx + bytesRequested >= currentChunk.length()) {
-    int bytesRemaining = currentChunk.length() - currentChunkIdx;
+    int bytesRemaining = (int)currentChunk.length() - currentChunkIdx;
     uv_mutex_lock(&outlock);
     if (outBufferStack.size() > 0) {
       memcpy(out, currentChunk.data() + currentChunkIdx, bytesRemaining);

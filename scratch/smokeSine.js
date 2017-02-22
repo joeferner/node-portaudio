@@ -1,4 +1,4 @@
-/* Copyright 2016 Streampunk Media Ltd.
+/* Copyright 2017 Streampunk Media Ltd.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ var portAudio = require('../index.js');
 // create a sine wave lookup table
 var sampleRate = 44100;
 var tableSize = 200;
-var buffer = new Buffer(tableSize * 4);
+var buffer = Buffer.allocUnsafe(tableSize * 4);
 for (var i = 0; i < tableSize * 4; i++) {
   buffer[i] = (Math.sin((i / tableSize) * 3.1415 * 2.0) * 127) + 127;
 }
