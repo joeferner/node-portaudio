@@ -17,7 +17,6 @@ var portAudio = require('../index.js');
 var fs = require('fs');
 var rs = fs.createReadStream('test.wav');
 
-// create a sine wave lookup table
 var sampleRate = 48000;
 
 console.log(portAudio.getDevices());
@@ -27,7 +26,7 @@ var pw = new portAudio.AudioWriter({
   sampleFormat: portAudio.SampleFormat16Bit,
   sampleRate: sampleRate });
 
-// console.log('pw', pw);
+console.log('pw', pw);
 
 rs.on('close', console.log.bind(null, 'Input stream closing.'));
 

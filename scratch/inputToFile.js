@@ -6,6 +6,7 @@ var pr = new portAudio.AudioReader({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
   sampleRate: 44100,
+  deviceId: 0
 });
 
 //Create a write stream to write out to a raw audio file
@@ -17,8 +18,16 @@ var to = setTimeout(function(){ },12345678);
 //Start streaming
 pr.once('audio_ready', function(pa) {
   pr.pipe(ws);
-  pr.pa.inputStart();
+  pr.pa.start();
 });
 
 //Clear timeout
 pr.once('finish',function() {clearTimeout(to); });
+
+process.on('SIGINT', () => {
+  console.log('Received SIGINT. Stopping recording.');
+  ws.close();
+  pr.pa.stop();
+  clearTimeout(to);
+  process.exit();
+});

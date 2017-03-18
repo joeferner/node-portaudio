@@ -60,7 +60,7 @@ NAN_METHOD(OpenInput) {
   req = new uv_async_t;
   uv_async_init(uv_default_loop(),req,ReadableCallback);
   uv_mutex_init(&padlock);
-  
+
   err = EnsureInitialized();
   if(err != paNoError) {
      sprintf(str, "Could not initialize PortAudio: %s", Pa_GetErrorText(err));
@@ -78,9 +78,11 @@ NAN_METHOD(OpenInput) {
 
   memset(&inputParameters, 0, sizeof(PaStreamParameters));
 
-  v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("device").ToLocalChecked());
+  v8Val = Nan::Get(options.ToLocalChecked(), Nan::New("deviceId").ToLocalChecked());
   int deviceId = (v8Val.ToLocalChecked()->IsUndefined()) ? -1 :
-    Nan::To<int32_t>(v8Val.ToLocalChecked()).FromMaybe(-1);
+    Nan::To<int32_t>(v8Val.ToLocalChecked()).FromMaybe(0);
+  // printf("Device ID is %i. Device count %i. Undefined %i.\n", deviceId,
+  //   Pa_GetDeviceCount(), v8Val.ToLocalChecked()->IsUndefined());
   if ((deviceId >= 0) && (deviceId < Pa_GetDeviceCount())) {
     inputParameters.device = (PaDeviceIndex) deviceId;
   } else {
@@ -149,9 +151,9 @@ NAN_METHOD(OpenInput) {
   }
   data->bufferLen = 0;
 
-  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("inputStart").ToLocalChecked(),
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("start").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(InputStreamStart)).ToLocalChecked());
-  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("inputStop").ToLocalChecked(),
+  Nan::Set(v8Stream.ToLocalChecked(), Nan::New("stop").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(InputStreamStop)).ToLocalChecked());
   Nan::Set(v8Stream.ToLocalChecked(), Nan::New("inputRead").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(ReadableRead)).ToLocalChecked());
@@ -161,7 +163,7 @@ NAN_METHOD(OpenInput) {
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(InputSetCallback)).ToLocalChecked());
   Nan::Set(v8Stream.ToLocalChecked(), Nan::New("disablePush").ToLocalChecked(),
     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(DisablePush)).ToLocalChecked());
-  
+
   info.GetReturnValue().Set(v8Stream.ToLocalChecked());
 
 }
@@ -219,7 +221,7 @@ NAN_METHOD(ReadableRead) {
     info.GetReturnValue().SetUndefined();
     return;
   }
-  
+
   //Calculate memory required to transfer entire buffer stack
   size_t totalMem = bufferStack.front().size();
 
@@ -307,6 +309,6 @@ static int nodePortAudioInputCallback(
   if(ret < 0){
     cerr << "Got uv async return code of " << ret;
   }
-  
+
   return paContinue;
 }

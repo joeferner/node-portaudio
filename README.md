@@ -71,11 +71,11 @@ An example of the output is:
     hostAPIName: 'Core Audio' } ]
 ```
 
-Note that the device `id` parameter index value can be used as to specify which device to use for playback or recording with optional paramter `deviceId`.
+Note that the device `id` parameter index value can be used as to specify which device to use for playback or recording with optional parameter `deviceId`.
 
 ### Playing audio
 
-Playing audio involves writing or piping audio data to an instance of `AudioWriter`. 
+Playing audio involves writing or piping audio data to an instance of `AudioWriter`.
 
 ```javascript
 var portAudio = require('naudiodon');
@@ -86,7 +86,7 @@ var pw = new portAudio.AudioWriter({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
   sampleRate: sampleRate,
-  deveiceId : 0 }); // Omit the deviceId to select the default device
+  deviceId : 0 }); // Omit the device to select the default device
 
 // Create a stream to pipe into the AudioWriter  
 // Note that this does not strip the WAV header so a click will be heard at the beginning
@@ -119,7 +119,7 @@ var fs = require('fs');
 var pr = new portAudio.AudioReader({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
-  sampleRate: 44100,
+  sampleRate: 44100
 });
 
 //Create a write stream to write out to a raw audio file
@@ -131,7 +131,7 @@ var to = setTimeout(function(){ },12345678);
 //Start streaming
 pr.once('audio_ready', function(pa) {
   pr.pipe(ws);
-  pr.pa.inputStart();
+  pr.pa.start();
 });
 
 //Clear timeout
@@ -140,6 +140,18 @@ pr.once('finish',function() {clearTimeout(to); });
 ```
 
 Note that this produces a raw audio file - wav headers would be required to create a wav file. However this basic example produces a file may be read by audio software such as Audacity, using the sample rate and format parameters set when establishing the stream.
+
+To stop the recording, close the piped output stream (e.g. `ws`)  and call `pw.pa.stop()`. For example:
+
+```javascript
+process.on('SIGINT', () => {
+  console.log('Received SIGINT. Stopping recording.');
+  ws.close();
+  pr.pa.stop();
+  clearTimeout(to);
+  process.exit();
+});
+```
 
 ## Troubleshooting
 
@@ -152,7 +164,7 @@ Ensure that when you compile portaudio that the configure scripts says "ALSA" ye
 You may see the following message during initilisation of the audio library on MacOS:
 
 ```
-WARNING:  140: This application, or a library it uses, is using the deprecated Carbon Component Manager 
+WARNING:  140: This application, or a library it uses, is using the deprecated Carbon Component Manager
 for hosting Audio Units. Support for this will be removed in a future release. Also, this makes the host
 incompatible with version 3 audio units. Please transition to the API's in AudioComponent.h.
 ```
