@@ -15,8 +15,6 @@
 
 #include "AudioInput.h"
 
-#define FRAMES_PER_BUFFER  (256)
-
 using namespace std;
 
 int paInputInitialized = false;

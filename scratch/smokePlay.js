@@ -28,13 +28,19 @@ var pw = new portAudio.AudioWriter({
 
 console.log('pw', pw);
 
-rs.on('close', console.log.bind(null, 'Input stream closing.'));
+rs.on('close', () => {
+  console.log('Input stream closing.');
+  pw.pa.stop();
+  clearTimeout(to);
+});
+
 
 var to = setTimeout(function () { }, 12345678);
 
 pw.once('audio_ready', function (pa) {
+  console.log('Received audio ready.');
   rs.pipe(pw);
   pw.pa.start();
 });
 
-pw.once('finish', function () { clearTimeout(to); });
+pw.once('finish', function () { console.log("Finish called."); clearTimeout(to); });

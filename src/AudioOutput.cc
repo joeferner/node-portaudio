@@ -24,6 +24,7 @@ queue<string> outBufferStack;
 string currentChunk;
 unsigned int currentChunkIdx;
 uv_mutex_t outlock;
+uv_async_t *outReq;
 
 static int nodePortAudioOutputCallback(
   const void *inputBuffer,
@@ -32,6 +33,8 @@ static int nodePortAudioOutputCallback(
   const PaStreamCallbackTimeInfo* timeInfo,
   PaStreamCallbackFlags statusFlags,
   void *userData);
+
+void WriteableCallback(uv_async_t* req);
 
 NAN_METHOD(StreamStart);
 NAN_METHOD(StreamStop);
@@ -49,8 +52,10 @@ NAN_METHOD(OpenOutput) {
 
   Nan::MaybeLocal<v8::Object> options = Nan::To<v8::Object>(info[0].As<v8::Object>());
 
+  outReq = new uv_async_t;
+  uv_async_init(uv_default_loop(),outReq,WriteableCallback);
   uv_mutex_init(&outlock);
-  
+
   err = EnsureInitialized();
   if(err != paNoError) {
     sprintf(str, "Could not initialize PortAudio: %s", Pa_GetErrorText(err));
@@ -212,14 +217,16 @@ void WriteableCallback(uv_async_t* req) {
 }
 
 NAN_METHOD(WritableWrite) {
+  STREAM_DATA;
   Nan::Callback *writeCallback = new Nan::Callback(info[2].As<v8::Function>());
   v8::Local<v8::Object> chunk = info[0].As<v8::Object>();
   int chunkLen = (int)node::Buffer::Length(chunk);
   string buffer((char *)node::Buffer::Data(chunk),chunkLen);
+  // printf("Writeable write length %i.", chunkLen);
   uv_mutex_lock(&outlock);
   outBufferStack.push(buffer);
   uv_mutex_unlock(&outlock);
-  writeCallback->Call(0, 0);
+  data->writeCallback = writeCallback;
 
   info.GetReturnValue().SetUndefined();
 }
@@ -252,18 +259,25 @@ static int nodePortAudioOutputCallback(
 
   multiplier = multiplier * data->channelCount;
   int bytesRequested = ((int) framesPerBuffer) * multiplier;
+  // printf("Bytes requested %i multiplier %i currentChunkIdx %i.\n", bytesRequested, multiplier, currentChunkIdx);
 
   unsigned char* out = (unsigned char*) outputBuffer;
   if (currentChunkIdx >= currentChunk.length() ) { //read from next
     uv_mutex_lock(&outlock);
+    // printf("Read from next.\n");
     if(outBufferStack.size() > 0){
       currentChunk = outBufferStack.front();
       outBufferStack.pop();
     }
+    outReq->data = data;
     uv_mutex_unlock(&outlock);
+    uv_async_send(outReq);
     currentChunkIdx = bytesRequested;
     memcpy(out, currentChunk.data() + bytesRequested, bytesRequested);
   } else if (currentChunkIdx + bytesRequested >= currentChunk.length()) {
+    // printf("Read current chunk.\n");
+    outReq->data = data;
+    uv_async_send(outReq);
     int bytesRemaining = (int)currentChunk.length() - currentChunkIdx;
     uv_mutex_lock(&outlock);
     if (outBufferStack.size() > 0) {
@@ -275,10 +289,12 @@ static int nodePortAudioOutputCallback(
     } else {
       printf("Reached the end of the stream - closing.");
       memcpy(out, currentChunk.data() + currentChunkIdx, bytesRemaining);
+      uv_mutex_unlock(&outlock);
       return paComplete;
     }
     uv_mutex_unlock(&outlock);
   } else { // read from buffer
+    // printf("Read from buffer.\n");
     memcpy(out, currentChunk.data() + currentChunkIdx, bytesRequested);
     currentChunkIdx += framesPerBuffer * multiplier;
   }
