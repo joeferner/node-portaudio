@@ -161,7 +161,7 @@ Ensure that when you compile portaudio that the configure scripts says "ALSA" ye
 
 ### Mac - Carbon Component Manager
 
-You may see the following message during initilisation of the audio library on MacOS:
+You may see or have seen the following message during initilisation of the audio library on MacOS:
 
 ```
 WARNING:  140: This application, or a library it uses, is using the deprecated Carbon Component Manager
@@ -169,8 +169,7 @@ for hosting Audio Units. Support for this will be removed in a future release. A
 incompatible with version 3 audio units. Please transition to the API's in AudioComponent.h.
 ```
 
-Streampunk Media know how to fix this issue in PortAudio and intend to contact the authors of PortAudio
-and provide them with a fix.
+A locally compiled version of the portaudio library is now included with the latest version of naudiodon that uses more up-to-date APIs from Apple. The portaudio team are [aware of this issue](https://app.assembla.com/spaces/portaudio/tickets/218-pa-coreaudio-uses-some--quot-deprecated-quot--apis----this-is-by-design-but-need/details).
 
 ## Status, support and further development
 
