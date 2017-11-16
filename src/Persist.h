@@ -13,11 +13,23 @@
   limitations under the License.
 */
 
-#include <nan.h>
-#include <node_buffer.h>
-#include <cstring>
-#include <queue>
-#include <string>
-#include "GetDevices.h"
+#ifndef PERSIST_H
+#define PERSIST_H
 
-NAN_METHOD(OpenOutput);
+#include <memory>
+
+namespace streampunk {
+
+class Persist {
+public:
+  Persist(v8::Local<v8::Object> object) 
+    : mPersistObj(object) {}
+  ~Persist() { mPersistObj.Reset(); }
+
+private:
+  Nan::Persistent<v8::Object> mPersistObj;
+};
+
+} // namespace streampunk
+
+#endif

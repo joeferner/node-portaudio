@@ -15,34 +15,35 @@
 
 var util = require("util");
 var EventEmitter = require("events");
-const Writable = require("stream").Writable;
 const Readable = require("stream").Readable;
 var portAudioBindings = require("bindings")("naudiodon.node");
 
-//var SegfaultHandler = require('../node-segfault-handler');
-//SegfaultHandler.registerHandler("crash.log");
+var SegfaultHandler = require('segfault-handler');
+SegfaultHandler.registerHandler("crash.log");
+
+function AudioOut(options) {
+  this.AudioOutAdon = new portAudioBindings.AudioOut(options);
+}
+AudioOut.prototype.start = function() {
+  this.AudioOutAdon.start();
+};
+AudioOut.prototype.write = function(chunk, cb) {
+  this.AudioOutAdon.write(chunk, cb);
+};
+AudioOut.prototype.quit = function(cb) {
+  let quitCb = arguments[0];
+  this.AudioOutAdon.quit(() => {
+    if (typeof quitCb === 'function')
+      quitCb();
+  });
+};
+
+exports.AudioOut = AudioOut;
 
 exports.SampleFormat8Bit = 8;
 exports.SampleFormat16Bit = 16;
 exports.SampleFormat24Bit = 24;
 exports.SampleFormat32Bit = 32;
-
-function AudioWriter (opts) {
-  Writable.call(this);
-  opts.channelCount = opts.channelCount || 2;
-  opts.sampleFormat = opts.sampleFormat || exports.SampleFormat8Bit;
-  opts.sampleRate = opts.sampleRate || 44100;
-  var paud = portAudioBindings.openOutput(opts);
-  this.pa = paud;
-  this._write = paud._write.bind(paud);
-  setImmediate(this.emit.bind(this, 'audio_ready', this.pa));
-  this.on('finish', function () {
-    console.log("Closing output stream.");
-    this.pa.stop();
-  });
-}
-util.inherits(AudioWriter, Writable);
-exports.AudioWriter = AudioWriter;
 
 function AudioReader (opts) {
   Readable.call(this);
