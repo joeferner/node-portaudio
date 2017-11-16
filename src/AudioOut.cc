@@ -165,7 +165,8 @@ public:
 
     double sampleRate = (double)mAudioOptions->sampleRate();
 
-    errCode = Pa_OpenStream(&mStream, NULL, &outParams, sampleRate, 0, paNoFlag, cb, this);
+    errCode = Pa_OpenStream(&mStream, NULL, &outParams, sampleRate,
+                            paFramesPerBufferUnspecified, paNoFlag, cb, this);
     if (errCode != paNoError) {
       std::string err = std::string("Could not open stream: ") + Pa_GetErrorText(errCode);
       Nan::ThrowError(err.c_str());
@@ -263,7 +264,7 @@ private:
 
   uint32_t doCopy(std::shared_ptr<Memory> chunk, void *dst, uint32_t numBytes) {
     uint32_t curChunkBytes = chunk->numBytes() - mCurOffset;
-    uint32_t thisChunkBytes = min(curChunkBytes, numBytes);
+    uint32_t thisChunkBytes = std::min<uint32_t>(curChunkBytes, numBytes);
     memcpy(dst, chunk->buf() + mCurOffset, thisChunkBytes);
     return thisChunkBytes;
   }
