@@ -126,38 +126,27 @@ public:
 
     PaStreamParameters outParams;
     memset(&outParams, 0, sizeof(PaStreamParameters));
+
     int32_t deviceID = (int32_t)mAudioOptions->deviceID();
-    if ((deviceID >= 0) && (deviceID < Pa_GetDeviceCount())) {
+    if ((deviceID >= 0) && (deviceID < Pa_GetDeviceCount()))
       outParams.device = (PaDeviceIndex)deviceID;
-    } else {
+    else
       outParams.device = Pa_GetDefaultOutputDevice();
-    }
-    if (outParams.device == paNoDevice) {
+    if (outParams.device == paNoDevice)
       Nan::ThrowError("No default output device");
-    }
     printf("Output device name is %s\n", Pa_GetDeviceInfo(outParams.device)->name);
 
     outParams.channelCount = mAudioOptions->channelCount();
-    if (outParams.channelCount > Pa_GetDeviceInfo(outParams.device)->maxOutputChannels) {
+    if (outParams.channelCount > Pa_GetDeviceInfo(outParams.device)->maxOutputChannels)
       Nan::ThrowError("Channel count exceeds maximum number of output channels for device");
-    }
 
     uint32_t sampleFormat = mAudioOptions->sampleFormat();
     switch(sampleFormat) {
-    case 8:
-      outParams.sampleFormat = paInt8;
-      break;
-    case 16:
-      outParams.sampleFormat = paInt16;
-      break;
-    case 24:
-      outParams.sampleFormat = paInt24;
-      break;
-    case 32:
-      outParams.sampleFormat = paInt32;
-      break;
-    default:
-      Nan::ThrowError("Invalid sampleFormat");
+    case 8: outParams.sampleFormat = paInt8; break;
+    case 16: outParams.sampleFormat = paInt16; break;
+    case 24: outParams.sampleFormat = paInt24; break;
+    case 32: outParams.sampleFormat = paInt32; break;
+    default: Nan::ThrowError("Invalid sampleFormat");
     }
 
     outParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultLowOutputLatency;
@@ -194,14 +183,17 @@ public:
     uint8_t *dst = (uint8_t *)buf;
     uint32_t bytesRemaining = frameCount * mAudioOptions->channelCount() * mAudioOptions->sampleFormat() / 8;
 
-    if (!mActive && !mCurChunk)
-      return false;
-
-    if (!mActive && (0 == mChunkQueue.size()) && (bytesRemaining >= mCurChunk->chunk()->numBytes() - mCurOffset)) {
-      uint32_t bytesCopied = doCopy(mCurChunk->chunk(), dst, bytesRemaining);
-      if (bytesRemaining - bytesCopied > 0)
-        printf("Finishing - %d bytes not available for the last output buffer\n", bytesRemaining - bytesCopied);
-
+    uint32_t active = isActive();
+    if (!active && (0 == mChunkQueue.size()) && 
+        (!mCurChunk || (mCurChunk && (bytesRemaining >= mCurChunk->chunk()->numBytes() - mCurOffset)))) {
+      if (mCurChunk) {
+        uint32_t bytesCopied = doCopy(mCurChunk->chunk(), dst, bytesRemaining);
+        uint32_t missingBytes = bytesRemaining - bytesCopied;
+        if (missingBytes > 0) {
+          printf("Finishing - %d bytes not available for the last output buffer\n", missingBytes);
+          memset(dst + bytesCopied, 0, missingBytes);
+        }
+      }
       std::lock_guard<std::mutex> lk(m);
       mFinished = true;
       cv.notify_one();
@@ -238,14 +230,14 @@ public:
 
   bool getErrStr(std::string& errStr) {
     std::lock_guard<std::mutex> lk(m);
-    errStr = mErrStr.c_str();
+    errStr = mErrStr;
     mErrStr = std::string();
     return errStr != std::string();
   }
 
   void quit() {
-    mActive = false;
     std::unique_lock<std::mutex> lk(m);
+    mActive = false;
     while(!mFinished)
       cv.wait(lk);
   }
@@ -259,8 +251,13 @@ private:
   bool mActive;
   bool mFinished;
   std::string mErrStr;
-  std::mutex m;
+  mutable std::mutex m;
   std::condition_variable cv;
+
+  bool isActive() const {
+    std::unique_lock<std::mutex> lk(m);
+    return mActive;
+  }
 
   uint32_t doCopy(std::shared_ptr<Memory> chunk, void *dst, uint32_t numBytes) {
     uint32_t curChunkBytes = chunk->numBytes() - mCurOffset;

@@ -75,37 +75,34 @@ Note that the device `id` parameter index value can be used as to specify which 
 
 ### Playing audio
 
-Playing audio involves writing or piping audio data to an instance of `AudioWriter`.
+Playing audio involves streaming audio data to an instance of `AudioOutput`.
 
 ```javascript
-var portAudio = require('naudiodon');
-var fs = require('fs');
+const fs = require('fs');
+const portAudio = require('naudiodon');
 
-// Create an instance of an AudioWriter, which is a WritableStream
-var pw = new portAudio.AudioWriter({
+// Create an instance of AudioOutput
+var ao = new portAudio.AudioOutput({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
-  sampleRate: sampleRate,
-  deviceId : 0 }); // Omit the device to select the default device
+  sampleRate: 48000,
+  deviceId : -1 // Use -1 or omit the deviceId to select the default device
+});
 
-// Create a stream to pipe into the AudioWriter  
+// handle errors from the AudioOutput
+ao.on('error', err => console.log(err));
+
+// Create a stream to pipe into the AudioOutput
 // Note that this does not strip the WAV header so a click will be heard at the beginning
 var rs = fs.createReadStream('steam_48000.wav');
 
-// Stop the Node.JS process from closing before the clip plays
-var to = setTimeout(function () { }, 12345678);
+// setup to close the output stream at the end of the read stream
+rs.on('end', () => ao.end());
 
-// When the audio device signals that it is ready, start piping data and start streaming
-pw.once('audio_ready', function (pa) {
-  rs.pipe(pw);
-  pw.pa.start();
-});
-
-// When the stream is finished, clear the timeout so the node process can complete
-pw.once('finish', function () { clearTimeout(to); });
+// Start piping data and start streaming
+rs.pipe(ao);
+ao.start();
 ```
-
-To stop the stream early, close the piped input or call `pw.pa.stop()`.
 
 ### Recording audio
 

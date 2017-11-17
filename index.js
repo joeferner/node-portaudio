@@ -13,32 +13,39 @@
   limitations under the License.
 */
 
-var util = require("util");
-var EventEmitter = require("events");
-const Readable = require("stream").Readable;
-var portAudioBindings = require("bindings")("naudiodon.node");
+const util = require("util");
+const EventEmitter = require("events");
+const { Readable, Writable } = require('stream');
+const portAudioBindings = require("bindings")("naudiodon.node");
 
-var SegfaultHandler = require('segfault-handler');
-SegfaultHandler.registerHandler("crash.log");
+// var SegfaultHandler = require('segfault-handler');
+// SegfaultHandler.registerHandler("crash.log");
 
-function AudioOut(options) {
+function AudioOutput(options) {
+  if (!(this instanceof AudioOutput))
+    return new AudioOutput(options);
+
   this.AudioOutAdon = new portAudioBindings.AudioOut(options);
-}
-AudioOut.prototype.start = function() {
-  this.AudioOutAdon.start();
-};
-AudioOut.prototype.write = function(chunk, cb) {
-  this.AudioOutAdon.write(chunk, cb);
-};
-AudioOut.prototype.quit = function(cb) {
-  let quitCb = arguments[0];
-  this.AudioOutAdon.quit(() => {
-    if (typeof quitCb === 'function')
-      quitCb();
+  Writable.call(this, {
+    highWaterMark: 16384,
+    decodeStrings: false,
+    objectMode: false,
+    write: (chunk, encoding, cb) => this.AudioOutAdon.write(chunk, cb)
   });
-};
 
-exports.AudioOut = AudioOut;
+  this.start = () => this.AudioOutAdon.start();
+  this.quit = cb => {
+    const quitCb = arguments[0];
+    this.AudioOutAdon.quit(() => {
+      if (typeof quitCb === 'function')
+        quitCb();
+    });
+  }
+  this.on('finish', () => this.quit());
+}
+util.inherits(AudioOutput, Writable);
+
+exports.AudioOutput = AudioOutput;
 
 exports.SampleFormat8Bit = 8;
 exports.SampleFormat16Bit = 16;
