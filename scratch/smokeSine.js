@@ -23,7 +23,7 @@ for (var i = 0; i < tableSize * 4; i++) {
   buffer[i] = (Math.sin((i / tableSize) * 3.1415 * 2.0) * 127) + 127;
 }
 
-var pw = new portAudio.AudioWriter({
+var pw = new portAudio.AudioOutput({
   channelCount: 1,
   sampleFormat: portAudio.SampleFormat8Bit,
   sampleRate: sampleRate

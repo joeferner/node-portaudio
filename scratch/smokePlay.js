@@ -21,7 +21,7 @@ var sampleRate = 48000;
 
 console.log(portAudio.getDevices());
 
-var pw = new portAudio.AudioWriter({
+var pw = new portAudio.AudioOutput({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
   sampleRate: sampleRate });
