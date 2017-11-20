@@ -13,6 +13,8 @@
   limitations under the License.
 */
 
+// Plays the sound of a steam train from file 'test.wav'.
+
 var portAudio = require('../index.js');
 var fs = require('fs');
 var rs = fs.createReadStream('test.wav');
@@ -21,26 +23,21 @@ var sampleRate = 48000;
 
 console.log(portAudio.getDevices());
 
-var pw = new portAudio.AudioOutput({
+var ao = new portAudio.AudioOutput({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
-  sampleRate: sampleRate });
+  sampleRate: sampleRate,
+  deviceId: -1 });
 
-console.log('pw', pw);
+console.log('ao', ao);
 
-rs.on('close', () => {
-  console.log('Input stream closing.');
-  pw.pa.stop();
-  clearTimeout(to);
-});
+ao.on('error', console.error);
 
+rs.on('finish', ao.end);
 
-var to = setTimeout(function () { }, 12345678);
+rs.pipe(ao);
 
-pw.once('audio_ready', function (pa) {
-  console.log('Received audio ready.');
-  rs.pipe(pw);
-  pw.pa.start();
-});
+ao.once('finish', () => { console.log("Finish called."); });
+ao.start();
 
-pw.once('finish', function () { console.log("Finish called."); clearTimeout(to); });
+process.on('SIGINT', ao.quit);

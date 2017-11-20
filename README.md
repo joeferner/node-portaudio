@@ -97,7 +97,7 @@ ao.on('error', err => console.log(err));
 var rs = fs.createReadStream('steam_48000.wav');
 
 // setup to close the output stream at the end of the read stream
-rs.on('end', () => ao.end());
+rs.on('finish', () => ao.end());
 
 // Start piping data and start streaming
 rs.pipe(ao);

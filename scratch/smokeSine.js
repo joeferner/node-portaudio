@@ -13,7 +13,9 @@
   limitations under the License.
 */
 
-var portAudio = require('../index.js');
+// Plays a since wave for approx 10 seconds
+
+const portAudio = require('../index.js');
 
 // create a sine wave lookup table
 var sampleRate = 44100;
@@ -23,42 +25,40 @@ for (var i = 0; i < tableSize * 4; i++) {
   buffer[i] = (Math.sin((i / tableSize) * 3.1415 * 2.0) * 127) + 127;
 }
 
-var pw = new portAudio.AudioOutput({
+var ao = new portAudio.AudioOutput({
   channelCount: 1,
   sampleFormat: portAudio.SampleFormat8Bit,
-  sampleRate: sampleRate
+  sampleRate: sampleRate,
+  deviceId: -1
 });
 
-pw.once('audio_ready', function (pa) {
-  function writeOneMillionTimes(writer, data, callback) {
-    var i = 1000000;
-    write();
-    function write() {
-      var ok = true;
-      do {
-        i -= 1;
-        if (i === 0) {
-          // last time!
-          writer.write(data, callback);
-        } else {
-          // see if we should continue, or wait
-          // don't pass the callback, because we're not done yet.
-          ok = writer.write(data);
-          // console.log('Writing data', ok);
-        }
-      } while (i > 0 && ok);
-      if (i > 0) {
-        // had to stop early!
-        // write some more once it drains
-        // console.log("So draining.");
-        writer.once('drain', write);
+function tenSecondsIsh(writer, data, callback) {
+  var i = 552;
+  write();
+  function write() {
+    var ok = true;
+    do {
+      i -= 1;
+      if (i === 0) {
+        // last time!
+        writer.end(data, callback);
+      } else {
+        // see if we should continue, or wait
+        // don't pass the callback, because we're not done yet.
+        ok = writer.write(data);
+        // console.log('Writing data', ok);
       }
+    } while (i > 0 && ok);
+    if (i > 0) {
+      // had to stop early!
+      // write some more once it drains
+      // console.log("So draining.");
+      writer.once('drain', write);
     }
   }
-  writeOneMillionTimes(pw, buffer, console.log.bind(null, "Done!"));
-  pw.pa.start();
-});
+}
 
-// setTimeout(pw.pa.start, 100);
+ao.on('error', console.error);
 
-setTimeout(function () { pw.pa.stop(); }, 10000);
+tenSecondsIsh(ao, buffer, console.log.bind(null, "Done!"));
+ao.start();
