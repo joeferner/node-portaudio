@@ -18,8 +18,8 @@ const EventEmitter = require("events");
 const { Readable, Writable } = require('stream');
 const portAudioBindings = require("bindings")("naudiodon.node");
 
-var SegfaultHandler = require('segfault-handler');
-SegfaultHandler.registerHandler("crash.log");
+// var SegfaultHandler = require('segfault-handler');
+// SegfaultHandler.registerHandler("crash.log");
 
 function AudioOutput(options) {
   if (!(this instanceof AudioOutput))
