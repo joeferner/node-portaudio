@@ -33,7 +33,7 @@ console.log('ao', ao);
 
 ao.on('error', console.error);
 
-rs.on('finish', ao.end);
+// rs.on('end', ao.end);
 
 rs.pipe(ao);
 
