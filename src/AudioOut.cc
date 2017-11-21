@@ -14,56 +14,17 @@
 */
 
 #include <nan.h>
-#include <sstream>
-#include <queue>
-#include <mutex>
-#include <condition_variable>
 #include "AudioOut.h"
 #include "Persist.h"
 #include "Params.h"
+#include "ChunkQueue.h"
+#include <mutex>
+#include <condition_variable>
 #include <portaudio.h>
 
 using namespace v8;
 
 namespace streampunk {
-
-template <class T>
-class ChunkQueue {
-public:
-  ChunkQueue(uint32_t maxQueue) : mMaxQueue(maxQueue), qu(), m(), cv() {}
-  ~ChunkQueue() {}
-  
-  void enqueue(T t) {
-    std::unique_lock<std::mutex> lk(m);
-    while(qu.size() >= mMaxQueue) {
-      cv.wait(lk);
-    }
-    qu.push(t);
-    cv.notify_one();
-  }
-  
-  T dequeue() {
-    std::unique_lock<std::mutex> lk(m);
-    while(qu.empty()) {
-      cv.wait(lk);
-    }
-    T val = qu.front();
-    qu.pop();
-    cv.notify_one();
-    return val;
-  }
-
-  size_t size() const {
-    std::lock_guard<std::mutex> lk(m);
-    return qu.size();
-  }
-
-private:
-  uint32_t mMaxQueue;
-  std::queue<T> qu;
-  mutable std::mutex m;
-  std::condition_variable cv;
-};
 
 class AudioChunk {
 public:
@@ -80,42 +41,9 @@ private:
   std::shared_ptr<Memory> mChunk;
 };
 
-class AudioOptions : public Params {
+class OutContext {
 public:
-  AudioOptions(Local<Object> tags)
-    : mDeviceID(unpackNum(tags, "deviceId", 0xffffffff)),
-      mSampleRate(unpackNum(tags, "sampleRate", 48000)),
-      mChannelCount(unpackNum(tags, "channelCount", 2)),
-      mSampleFormat(unpackNum(tags, "sampleFormat", 24))
-  {}
-  ~AudioOptions() {}
-
-  uint32_t deviceID() const  { return mDeviceID; }
-  uint32_t sampleRate() const  { return mSampleRate; }
-  uint32_t channelCount() const  { return mChannelCount; }
-  uint32_t sampleFormat() const  { return mSampleFormat; }
-
-  std::string toString() const  { 
-    std::stringstream ss;
-    ss << "Audio output options: ";
-    if (mDeviceID != 0xffffffff)
-      ss << "device " << std::hex << mDeviceID << std::dec << ", ";
-    ss << "sample rate " << mSampleRate << ", ";
-    ss << "channels " << mChannelCount << ", ";
-    ss << "bits per sample " << mSampleFormat;
-    return ss.str();
-  }
-
-private:
-  uint32_t mDeviceID;
-  uint32_t mSampleRate;
-  uint32_t mChannelCount;
-  uint32_t mSampleFormat;
-};
-
-class PaContext {
-public:
-  PaContext(std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb, uint32_t maxQueue)
+  OutContext(std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb, uint32_t maxQueue)
     : mAudioOptions(audioOptions), mChunkQueue(maxQueue), mCurOffset(0), mActive(true), mFinished(false) {
 
     PaError errCode = Pa_Initialize();
@@ -123,6 +51,8 @@ public:
       std::string err = std::string("Could not initialize PortAudio: ") + Pa_GetErrorText(errCode);
       Nan::ThrowError(err.c_str());
     }
+
+    printf("Output %s\n", mAudioOptions->toString().c_str());
 
     PaStreamParameters outParams;
     memset(&outParams, 0, sizeof(PaStreamParameters));
@@ -162,8 +92,8 @@ public:
     }
   }
   
-  ~PaContext() {
-    Pa_CloseStream(mStream);
+  ~OutContext() {
+    Pa_StopStream(mStream);
     Pa_Terminate();
   }
 
@@ -203,10 +133,17 @@ public:
           mCurChunk = mChunkQueue.dequeue();
           mCurOffset = 0;
         }
-        uint32_t bytesCopied = doCopy(mCurChunk->chunk(), dst, bytesRemaining);
-        bytesRemaining -= bytesCopied;
-        dst += bytesCopied;
-        mCurOffset += bytesCopied;
+        if (mCurChunk) {
+          uint32_t bytesCopied = doCopy(mCurChunk->chunk(), dst, bytesRemaining);
+          bytesRemaining -= bytesCopied;
+          dst += bytesCopied;
+          mCurOffset += bytesCopied;
+        } else { // Deal with termination case of ChunkQueue being kicked and returning null chunk
+          std::lock_guard<std::mutex> lk(m);
+          mFinished = true;
+          cv.notify_one();
+          break;
+        }
       }
     }
 
@@ -238,6 +175,7 @@ public:
   void quit() {
     std::unique_lock<std::mutex> lk(m);
     mActive = false;
+    mChunkQueue.quit();
     while(!mFinished)
       cv.wait(lk);
   }
@@ -267,31 +205,29 @@ private:
   }
 };
 
-int paCallback(const void *input, void *output, unsigned long frameCount, 
+int OutCallback(const void *input, void *output, unsigned long frameCount, 
                const PaStreamCallbackTimeInfo *timeInfo, 
                PaStreamCallbackFlags statusFlags, void *userData) {
-  PaContext *context = (PaContext *)userData;
+  OutContext *context = (OutContext *)userData;
   context->checkStatus(statusFlags);
   return context->fillBuffer(output, frameCount) ? paContinue : paComplete;
 }
 
 class OutWorker : public Nan::AsyncWorker {
   public:
-    OutWorker(std::shared_ptr<PaContext> paContext, Nan::Callback *callback, std::shared_ptr<AudioChunk> audioChunk)
-      : AsyncWorker(callback),
-        mPaContext(paContext),
-        mAudioChunk(audioChunk)
-      { }
+    OutWorker(std::shared_ptr<OutContext> OutContext, Nan::Callback *callback, std::shared_ptr<AudioChunk> audioChunk)
+      : AsyncWorker(callback), mOutContext(OutContext), mAudioChunk(audioChunk) 
+    { }
     ~OutWorker() {}
 
     void Execute() {
-      mPaContext->addChunk(mAudioChunk);
+      mOutContext->addChunk(mAudioChunk);
     }
 
     void HandleOKCallback () {
       Nan::HandleScope scope;
       std::string errStr;
-      if (mPaContext->getErrStr(errStr)) {
+      if (mOutContext->getErrStr(errStr)) {
         Local<Value> argv[] = { Nan::Error(errStr.c_str()) };
         callback->Call(1, argv);
       } else {
@@ -300,20 +236,19 @@ class OutWorker : public Nan::AsyncWorker {
     }
 
   private:
-    std::shared_ptr<PaContext> mPaContext;
+    std::shared_ptr<OutContext> mOutContext;
     std::shared_ptr<AudioChunk> mAudioChunk;
 };
 
-class QuitWorker : public Nan::AsyncWorker {
+class QuitOutWorker : public Nan::AsyncWorker {
   public:
-    QuitWorker(std::shared_ptr<PaContext> paContext, Nan::Callback *callback)
-      : AsyncWorker(callback),
-        mPaContext(paContext)
-      { }
-    ~QuitWorker() {}
+    QuitOutWorker(std::shared_ptr<OutContext> OutContext, Nan::Callback *callback)
+      : AsyncWorker(callback), mOutContext(OutContext)
+    { }
+    ~QuitOutWorker() {}
 
     void Execute() {
-      mPaContext->quit();
+      mOutContext->quit();
     }
 
     void HandleOKCallback () {
@@ -322,21 +257,19 @@ class QuitWorker : public Nan::AsyncWorker {
     }
 
   private:
-    std::shared_ptr<PaContext> mPaContext;
+    std::shared_ptr<OutContext> mOutContext;
 };
 
 AudioOut::AudioOut(Local<Object> options) { 
-  std::shared_ptr<AudioOptions> audioOptions = std::make_shared<AudioOptions>(options); 
-  printf("%s\n", audioOptions->toString().c_str());
-
-  mPaContext = std::make_shared<PaContext>(audioOptions, paCallback, 10);
+  mOutContext = std::make_shared<OutContext>(std::make_shared<AudioOptions>(options), OutCallback, 2);
 }
 AudioOut::~AudioOut() {}
 
+void AudioOut::doStart() { mOutContext->start(); }
+
 NAN_METHOD(AudioOut::Start) {
   AudioOut* obj = Nan::ObjectWrap::Unwrap<AudioOut>(info.Holder());
-
-  obj->mPaContext->start();
+  obj->doStart();
   info.GetReturnValue().SetUndefined();
 }
 
@@ -349,10 +282,10 @@ NAN_METHOD(AudioOut::Write) {
     return Nan::ThrowError("AudioOut Write requires a valid callback as the second parameter");
 
   Local<Object> chunkObj = Local<Object>::Cast(info[0]);
-  Nan::Callback *callback = new Nan::Callback(Local<Function>::Cast(info[1]));
+  Local<Function> callback = Local<Function>::Cast(info[1]);
   AudioOut* obj = Nan::ObjectWrap::Unwrap<AudioOut>(info.Holder());
 
-  AsyncQueueWorker(new OutWorker(obj->mPaContext, callback, std::make_shared<AudioChunk>(chunkObj)));
+  AsyncQueueWorker(new OutWorker(obj->getContext(), new Nan::Callback(callback), std::make_shared<AudioChunk>(chunkObj)));
   info.GetReturnValue().SetUndefined();
 }
 
@@ -362,11 +295,11 @@ NAN_METHOD(AudioOut::Quit) {
   if (!info[0]->IsFunction())
     return Nan::ThrowError("AudioOut Quit requires a valid callback as the parameter");
 
-  Nan::Callback *callback = new Nan::Callback(Local<Function>::Cast(info[0]));
+  Local<Function> callback = Local<Function>::Cast(info[0]);
   AudioOut* obj = Nan::ObjectWrap::Unwrap<AudioOut>(info.Holder());
 
-  AsyncQueueWorker(new QuitWorker(obj->mPaContext, callback));
-  obj->mPaContext.reset();
+  AsyncQueueWorker(new QuitOutWorker(obj->getContext(), new Nan::Callback(callback)));
+  obj->resetContext();
   info.GetReturnValue().SetUndefined();
 }
 

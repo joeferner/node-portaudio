@@ -13,37 +13,27 @@
   limitations under the License.
 */
 
+#include <nan.h>
 #include "GetDevices.h"
+// #include <node_buffer.h>
+// #include <cstring>
+#include <portaudio.h>
 
-int paInitialized = false;
-
-PaError EnsureInitialized() {
-  PaError err;
-
-  if(!paInitialized) {
-    err = Pa_Initialize();
-    if(err != paNoError) {
-      return err;
-    };
-    paInitialized = true;
-  }
-  return paNoError;
-}
+namespace streampunk {
 
 NAN_METHOD(GetDevices) {
-  char str[1000];
-  int numDevices;
+  uint32_t numDevices;
 
-  PaError err = EnsureInitialized();
-  if(err != paNoError) {
-    sprintf(str, "Could not initialize PortAudio %d", err);
-    return Nan::ThrowError(str);
+  PaError errCode = Pa_Initialize();
+  if(errCode != paNoError) {
+    std::string err = std::string("Could not initialize PortAudio: ") + Pa_GetErrorText(errCode);
+    Nan::ThrowError(err.c_str());
   }
 
   numDevices = Pa_GetDeviceCount();
   v8::Local<v8::Array> result = Nan::New<v8::Array>(numDevices);
 
-  for ( int i = 0 ; i < numDevices ; i++) {
+  for (uint32_t i = 0; i < numDevices; ++i) {
     const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(i);
     v8::Local<v8::Object> v8DeviceInfo = Nan::New<v8::Object>();
     Nan::Set(v8DeviceInfo, Nan::New("id").ToLocalChecked(), Nan::New(i));
@@ -69,5 +59,8 @@ NAN_METHOD(GetDevices) {
     Nan::Set(result, i, v8DeviceInfo);
   }
 
+  Pa_Terminate();
   info.GetReturnValue().Set(result);
 }
+
+} // namespace streampunk

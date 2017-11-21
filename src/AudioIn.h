@@ -13,33 +13,33 @@
   limitations under the License.
 */
 
-#ifndef AUDIOOUT_H
-#define AUDIOOUT_H
+#ifndef AUDIOIN_H
+#define AUDIOIN_H
 
 #include "Memory.h"
 
 namespace streampunk {
 
-class OutContext;
+class InContext;
 
-class AudioOut : public Nan::ObjectWrap {
+class AudioIn : public Nan::ObjectWrap {
 public:
   static NAN_MODULE_INIT(Init);
 
-  std::shared_ptr<OutContext> getContext() const { return mOutContext; }
+  std::shared_ptr<InContext> getContext() const { return mInContext; }
   void doStart();
-  void resetContext() { mOutContext.reset(); }
+  void resetContext() { mInContext.reset(); }
 
 private:
-  explicit AudioOut(v8::Local<v8::Object> options);
-  ~AudioOut();
+  explicit AudioIn(v8::Local<v8::Object> options);
+  ~AudioIn();
 
   static NAN_METHOD(New) {
     if (info.IsConstructCall()) {
       if (!((info.Length() == 1) && (info[0]->IsObject())))
-        return Nan::ThrowError("AudioOut constructor requires a valid options object as the parameter");
+        return Nan::ThrowError("AudioIn constructor requires a valid options object as the parameter");
       v8::Local<v8::Object> options = v8::Local<v8::Object>::Cast(info[0]);
-      AudioOut *obj = new AudioOut(options);
+      AudioIn *obj = new AudioIn(options);
       obj->Wrap(info.This());
       info.GetReturnValue().Set(info.This());
     } else {
@@ -56,10 +56,10 @@ private:
   }
 
   static NAN_METHOD(Start);
-  static NAN_METHOD(Write);
+  static NAN_METHOD(Read);
   static NAN_METHOD(Quit);
 
-  std::shared_ptr<OutContext> mOutContext;
+  std::shared_ptr<InContext> mInContext;
 };
 
 } // namespace streampunk

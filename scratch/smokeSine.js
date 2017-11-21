@@ -22,7 +22,7 @@ var sampleRate = 44100;
 var tableSize = 200;
 var buffer = Buffer.allocUnsafe(tableSize * 4);
 for (var i = 0; i < tableSize * 4; i++) {
-  buffer[i] = (Math.sin((i / tableSize) * 3.1415 * 2.0) * 127) + 127;
+  buffer[i] = (Math.sin((i / tableSize) * 3.1415 * 2.0) * 127);
 }
 
 var ao = new portAudio.AudioOutput({

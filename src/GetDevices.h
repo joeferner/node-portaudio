@@ -13,11 +13,13 @@
   limitations under the License.
 */
 
-#include <nan.h>
-#include <node_buffer.h>
-#include <cstring>
-#include <portaudio.h>
+#ifndef GETDEVICES_H
+#define GETDEVICES_H
+
+namespace streampunk {
 
 NAN_METHOD(GetDevices);
 
-PaError EnsureInitialized();
+} // namespace streampunk
+
+#endif

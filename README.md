@@ -81,7 +81,7 @@ Playing audio involves streaming audio data to an instance of `AudioOutput`.
 const fs = require('fs');
 const portAudio = require('naudiodon');
 
-// Create an instance of AudioOutput
+// Create an instance of AudioOutput, which is a WriteableStream
 var ao = new portAudio.AudioOutput({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
@@ -90,7 +90,7 @@ var ao = new portAudio.AudioOutput({
 });
 
 // handle errors from the AudioOutput
-ao.on('error', err => console.log(err));
+ao.on('error', err => console.error);
 
 // Create a stream to pipe into the AudioOutput
 // Note that this does not strip the WAV header so a click will be heard at the beginning
@@ -106,47 +106,40 @@ ao.start();
 
 ### Recording audio
 
-Recording audio invovles reading from an instance of `AudioReader`.
+Recording audio invovles reading from an instance of `AudioInput`.
 
 ```javascript
-var portAudio = require('../index.js');
 var fs = require('fs');
+var portAudio = require('../index.js');
 
-//Create a new instance of Audio Reader, which is a ReadableStream
-var pr = new portAudio.AudioReader({
+// Create an instance of AudioInput, which is a ReadableStream
+var ai = new portAudio.AudioInput({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
   sampleRate: 44100
+  deviceId : -1 // Use -1 or omit the deviceId to select the default device
 });
 
-//Create a write stream to write out to a raw audio file
+// handle errors from the AudioInput
+ai.on('error', err => console.error);
+
+// Create a write stream to write out to a raw audio file
 var ws = fs.createWriteStream('rawAudio.raw');
 
-//Set a timeout
-var to = setTimeout(function(){ },12345678);
-
 //Start streaming
-pr.once('audio_ready', function(pa) {
-  pr.pipe(ws);
-  pr.pa.start();
-});
-
-//Clear timeout
-pr.once('finish',function() {clearTimeout(to); });
+ai.pipe(ws);
+ai.start();
 
 ```
 
 Note that this produces a raw audio file - wav headers would be required to create a wav file. However this basic example produces a file may be read by audio software such as Audacity, using the sample rate and format parameters set when establishing the stream.
 
-To stop the recording, close the piped output stream (e.g. `ws`)  and call `pw.pa.stop()`. For example:
+To stop the recording, call `ai.quit()`. For example:
 
 ```javascript
 process.on('SIGINT', () => {
   console.log('Received SIGINT. Stopping recording.');
-  ws.close();
-  pr.pa.stop();
-  clearTimeout(to);
-  process.exit();
+  ai.quit();
 });
 ```
 

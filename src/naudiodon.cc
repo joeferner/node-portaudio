@@ -15,15 +15,14 @@
 
 #include <nan.h>
 #include "GetDevices.h"
-#include "AudioInput.h"
+#include "AudioIn.h"
 #include "AudioOut.h"
 
 NAN_MODULE_INIT(Init) {
-  Nan::Set(target, Nan::New("openInput").ToLocalChecked(),
-     Nan::GetFunction(Nan::New<v8::FunctionTemplate>(OpenInput)).ToLocalChecked());
   Nan::Set(target, Nan::New("getDevices").ToLocalChecked(),
-    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(GetDevices)).ToLocalChecked());
+    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(streampunk::GetDevices)).ToLocalChecked());
 
+  streampunk::AudioIn::Init(target);
   streampunk::AudioOut::Init(target);
 }
 

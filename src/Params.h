@@ -17,6 +17,7 @@
 #define PARAMS_H
 
 #include <nan.h>
+#include <sstream>
 
 using namespace v8;
 
@@ -43,49 +44,65 @@ protected:
   bool unpackBool(Local<Object> tags, const std::string& key, bool dflt) {
     bool result = dflt;
     Local<Value> val = getKey(tags, key);
-    if (Nan::Null() != val) {
-      if (val->IsArray()) {
-        std::string valStr = unpackValue(val);
-        if (!valStr.empty()) {
-          if ((0==valStr.compare("1")) || (0==valStr.compare("true")))
-            result = true;
-          else if ((0==valStr.compare("0")) || (0==valStr.compare("false")))
-            result = false;
-        }
-      } else
-        result = Nan::To<bool>(val).FromJust();
-    }
+    if (Nan::Null() != val)
+      result = Nan::To<bool>(val).FromJust();
     return result;
   }
 
   uint32_t unpackNum(Local<Object> tags, const std::string& key, uint32_t dflt) {
     uint32_t result = dflt;
     Local<Value> val = getKey(tags, key);
-    if (Nan::Null() != val) {
-      if (val->IsArray()) {
-        std::string valStr = unpackValue(val);
-        result = valStr.empty()?dflt:std::stoi(valStr);
-      } else
-        result = Nan::To<uint32_t>(val).FromJust();
-    }
+    if (Nan::Null() != val)
+      result = Nan::To<uint32_t>(val).FromJust();
     return result;
   } 
 
   std::string unpackStr(Local<Object> tags, const std::string& key, std::string dflt) {
     std::string result = dflt;
     Local<Value> val = getKey(tags, key);
-    if (Nan::Null() != val) {
-      if (val->IsArray()) {
-        std::string valStr = unpackValue(val);
-        result = valStr.empty()?dflt:valStr;
-      } else
-        result = *String::Utf8Value(val);
-    }
+    if (Nan::Null() != val)
+      result = *String::Utf8Value(val);
     return result;
   } 
 
 private:
   Params(const Params &);
+};
+
+
+class AudioOptions : public Params {
+public:
+  AudioOptions(Local<Object> tags)
+    : mDeviceID(unpackNum(tags, "deviceId", 0xffffffff)),
+      mSampleRate(unpackNum(tags, "sampleRate", 48000)),
+      mChannelCount(unpackNum(tags, "channelCount", 2)),
+      mSampleFormat(unpackNum(tags, "sampleFormat", 24))
+  {}
+  ~AudioOptions() {}
+
+  uint32_t deviceID() const  { return mDeviceID; }
+  uint32_t sampleRate() const  { return mSampleRate; }
+  uint32_t channelCount() const  { return mChannelCount; }
+  uint32_t sampleFormat() const  { return mSampleFormat; }
+
+  std::string toString() const  { 
+    std::stringstream ss;
+    ss << "audio options: ";
+    if (mDeviceID == 0xffffffff)
+      ss << "default device, ";
+    else
+      ss << "device " << mDeviceID << ", ";
+    ss << "sample rate " << mSampleRate << ", ";
+    ss << "channels " << mChannelCount << ", ";
+    ss << "bits per sample " << mSampleFormat;
+    return ss.str();
+  }
+
+private:
+  uint32_t mDeviceID;
+  uint32_t mSampleRate;
+  uint32_t mChannelCount;
+  uint32_t mSampleFormat;
 };
 
 } // namespace streampunk
