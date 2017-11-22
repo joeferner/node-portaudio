@@ -16,7 +16,4 @@ var ws = fs.createWriteStream('rawAudio.raw');
 ai.pipe(ws);
 ai.start();
 
-process.once('SIGINT', () => {
-  console.log('Received SIGINT. Stopping recording.');
-  ai.quit();
-});
+process.once('SIGINT', ai.quit);

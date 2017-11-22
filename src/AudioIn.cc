@@ -98,6 +98,11 @@ public:
     }
   }
 
+  void stop() {
+    Pa_StopStream(mStream);
+    Pa_Terminate();
+  }
+
   std::shared_ptr<Memory> readChunk() {
     return mChunkQueue.dequeue();
   }
@@ -157,8 +162,8 @@ int InCallback(const void *input, void *output, unsigned long frameCount,
 
 class InWorker : public Nan::AsyncWorker {
   public:
-    InWorker(std::shared_ptr<InContext> InContext, Nan::Callback *callback, uint32_t sizeAdv)
-      : AsyncWorker(callback), mInContext(InContext), mSizeAdv(sizeAdv)
+    InWorker(std::shared_ptr<InContext> InContext, Nan::Callback *callback)
+      : AsyncWorker(callback), mInContext(InContext)
     { }
     ~InWorker() {}
 
@@ -186,7 +191,6 @@ class InWorker : public Nan::AsyncWorker {
   private:
     std::shared_ptr<InContext> mInContext;
     std::shared_ptr<Memory> mInChunk;
-    uint32_t mSizeAdv;
 };
 
 class QuitInWorker : public Nan::AsyncWorker {
@@ -202,6 +206,7 @@ class QuitInWorker : public Nan::AsyncWorker {
 
     void HandleOKCallback () {
       Nan::HandleScope scope;
+      mInContext->stop();
       callback->Call(0, NULL);
     }
 
@@ -230,11 +235,11 @@ NAN_METHOD(AudioIn::Read) {
   if (!info[1]->IsFunction())
     return Nan::ThrowError("AudioIn Read requires a valid callback as the second parameter");
 
-  uint32_t sizeAdv = Nan::To<uint32_t>(info[0]).FromJust();
+  // uint32_t sizeAdv = Nan::To<uint32_t>(info[0]).FromJust();
   Local<Function> callback = Local<Function>::Cast(info[1]);
   AudioIn* obj = Nan::ObjectWrap::Unwrap<AudioIn>(info.Holder());
 
-  AsyncQueueWorker(new InWorker(obj->getContext(), new Nan::Callback(callback), sizeAdv));
+  AsyncQueueWorker(new InWorker(obj->getContext(), new Nan::Callback(callback)));
   info.GetReturnValue().SetUndefined();
 }
 
@@ -248,7 +253,6 @@ NAN_METHOD(AudioIn::Quit) {
   AudioIn* obj = Nan::ObjectWrap::Unwrap<AudioIn>(info.Holder());
 
   AsyncQueueWorker(new QuitInWorker(obj->getContext(), new Nan::Callback(callback)));
-  obj->resetContext();
   info.GetReturnValue().SetUndefined();
 }
 

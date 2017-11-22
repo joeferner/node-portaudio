@@ -62,6 +62,7 @@ function AudioOutput(options) {
   if (!(this instanceof AudioOutput))
     return new AudioOutput(options);
 
+  let Active = true;
   this.AudioOutAdon = new portAudioBindings.AudioOut(options);
   Writable.call(this, {
     highWaterMark: 16384,
@@ -72,13 +73,14 @@ function AudioOutput(options) {
 
   this.start = () => this.AudioOutAdon.start();
   this.quit = cb => {
+    Active = false;
     const quitCb = arguments[0];
     this.AudioOutAdon.quit(() => {
       if (typeof quitCb === 'function')
         quitCb();
     });
   }
-  this.on('finish', () => this.quit());
+  this.on('finish', () => { if (Active) this.quit(); });
 }
 util.inherits(AudioOutput, Writable);
 exports.AudioOutput = AudioOutput;

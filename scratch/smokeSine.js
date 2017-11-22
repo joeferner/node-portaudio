@@ -62,3 +62,5 @@ ao.on('error', console.error);
 
 tenSecondsIsh(ao, buffer, console.log.bind(null, "Done!"));
 ao.start();
+
+process.once('SIGINT', ao.quit);

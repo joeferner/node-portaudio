@@ -28,7 +28,6 @@ public:
 
   std::shared_ptr<OutContext> getContext() const { return mOutContext; }
   void doStart();
-  void resetContext() { mOutContext.reset(); }
 
 private:
   explicit AudioOut(v8::Local<v8::Object> options);

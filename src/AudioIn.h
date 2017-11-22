@@ -28,7 +28,6 @@ public:
 
   std::shared_ptr<InContext> getContext() const { return mInContext; }
   void doStart();
-  void resetContext() { mInContext.reset(); }
 
 private:
   explicit AudioIn(v8::Local<v8::Object> options);

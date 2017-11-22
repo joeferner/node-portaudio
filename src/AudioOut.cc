@@ -105,6 +105,11 @@ public:
     }
   }
 
+  void stop() {
+    Pa_StopStream(mStream);
+    Pa_Terminate();
+  }
+
   void addChunk(std::shared_ptr<AudioChunk> audioChunk) {
     mChunkQueue.enqueue(audioChunk);
   }
@@ -253,6 +258,7 @@ class QuitOutWorker : public Nan::AsyncWorker {
 
     void HandleOKCallback () {
       Nan::HandleScope scope;
+      mOutContext->stop();
       callback->Call(0, NULL);
     }
 
@@ -299,7 +305,6 @@ NAN_METHOD(AudioOut::Quit) {
   AudioOut* obj = Nan::ObjectWrap::Unwrap<AudioOut>(info.Holder());
 
   AsyncQueueWorker(new QuitOutWorker(obj->getContext(), new Nan::Callback(callback)));
-  obj->resetContext();
   info.GetReturnValue().SetUndefined();
 }
 
