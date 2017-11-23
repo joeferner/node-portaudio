@@ -39,7 +39,8 @@ function AudioInput(options) {
     read: size => {
       this.AudioInAdon.read(size, (err, buf) => {
         if (err)
-          this.emit('error', err);
+          console.error(err);
+          // this.emit('error', err); // causes Streampunk Microphone node to exit early...
         else
           this.push(buf);
       });

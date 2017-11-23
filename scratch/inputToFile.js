@@ -8,6 +8,7 @@ var ai = new portAudio.AudioInput({
   sampleRate: 44100,
   deviceId: 3
 });
+ai.on('error', console.error);
 
 //Create a write stream to write out to a raw audio file
 var ws = fs.createWriteStream('rawAudio.raw');

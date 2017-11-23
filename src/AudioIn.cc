@@ -173,11 +173,14 @@ class InWorker : public Nan::AsyncWorker {
 
     void HandleOKCallback () {
       Nan::HandleScope scope;
+
       std::string errStr;
       if (mInContext->getErrStr(errStr)) {
         Local<Value> argv[] = { Nan::Error(errStr.c_str()) };
         callback->Call(1, argv);
-      } else if (mInChunk) {
+      }
+
+      if (mInChunk) {
         outstandingAllocs.insert(make_pair((char*)mInChunk->buf(), mInChunk));
         Nan::MaybeLocal<Object> maybeBuf = Nan::NewBuffer((char*)mInChunk->buf(), mInChunk->numBytes(), freeAllocCb, 0);
         Local<Value> argv[] = { Nan::Null(), maybeBuf.ToLocalChecked() };
