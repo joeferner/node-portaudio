@@ -36,8 +36,8 @@ static void freeAllocCb(char* data, void* hint) {
 
 class InContext {
 public:
-  InContext(std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb, uint32_t maxQueue)
-    : mActive(true), mAudioOptions(audioOptions), mChunkQueue(maxQueue) {
+  InContext(std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb)
+    : mActive(true), mAudioOptions(audioOptions), mChunkQueue(mAudioOptions->maxQueue()) {
 
     PaError errCode = Pa_Initialize();
     if (errCode != paNoError) {
@@ -76,9 +76,15 @@ public:
     inParams.hostApiSpecificStreamInfo = NULL;
 
     double sampleRate = (double)mAudioOptions->sampleRate();
+    uint32_t framesPerBuffer = paFramesPerBufferUnspecified;
+
+    #ifdef __arm__
+    framesPerBuffer = 256;
+    inParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultHighInputLatency;
+    #endif
 
     errCode = Pa_OpenStream(&mStream, &inParams, NULL, sampleRate,
-                            paFramesPerBufferUnspecified, paNoFlag, cb, this);
+                            framesPerBuffer, paNoFlag, cb, this);
     if (errCode != paNoError) {
       std::string err = std::string("Could not open stream: ") + Pa_GetErrorText(errCode);
       Nan::ThrowError(err.c_str());
@@ -218,7 +224,7 @@ class QuitInWorker : public Nan::AsyncWorker {
 };
 
 AudioIn::AudioIn(Local<Object> options) { 
-  mInContext = std::make_shared<InContext>(std::make_shared<AudioOptions>(options), InCallback, 2);
+  mInContext = std::make_shared<InContext>(std::make_shared<AudioOptions>(options), InCallback);
 }
 AudioIn::~AudioIn() {}
 

@@ -74,9 +74,10 @@ class AudioOptions : public Params {
 public:
   AudioOptions(Local<Object> tags)
     : mDeviceID(unpackNum(tags, "deviceId", 0xffffffff)),
-      mSampleRate(unpackNum(tags, "sampleRate", 48000)),
+      mSampleRate(unpackNum(tags, "sampleRate", 44100)),
       mChannelCount(unpackNum(tags, "channelCount", 2)),
-      mSampleFormat(unpackNum(tags, "sampleFormat", 24))
+      mSampleFormat(unpackNum(tags, "sampleFormat", 8)),
+      mMaxQueue(unpackNum(tags, "maxQueue", 2))
   {}
   ~AudioOptions() {}
 
@@ -84,6 +85,7 @@ public:
   uint32_t sampleRate() const  { return mSampleRate; }
   uint32_t channelCount() const  { return mChannelCount; }
   uint32_t sampleFormat() const  { return mSampleFormat; }
+  uint32_t maxQueue() const  { return mMaxQueue; }
 
   std::string toString() const  { 
     std::stringstream ss;
@@ -94,7 +96,8 @@ public:
       ss << "device " << mDeviceID << ", ";
     ss << "sample rate " << mSampleRate << ", ";
     ss << "channels " << mChannelCount << ", ";
-    ss << "bits per sample " << mSampleFormat;
+    ss << "bits per sample " << mSampleFormat << ", ";
+    ss << "max queue " << mMaxQueue;
     return ss.str();
   }
 
@@ -103,6 +106,7 @@ private:
   uint32_t mSampleRate;
   uint32_t mChannelCount;
   uint32_t mSampleFormat;
+  uint32_t mMaxQueue;
 };
 
 } // namespace streampunk

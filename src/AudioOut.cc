@@ -43,8 +43,9 @@ private:
 
 class OutContext {
 public:
-  OutContext(std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb, uint32_t maxQueue)
-    : mAudioOptions(audioOptions), mChunkQueue(maxQueue), mCurOffset(0), mActive(true), mFinished(false) {
+  OutContext(std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb)
+    : mAudioOptions(audioOptions), mChunkQueue(mAudioOptions->maxQueue()), 
+      mCurOffset(0), mActive(true), mFinished(false) {
 
     PaError errCode = Pa_Initialize();
     if (errCode != paNoError) {
@@ -83,9 +84,15 @@ public:
     outParams.hostApiSpecificStreamInfo = NULL;
 
     double sampleRate = (double)mAudioOptions->sampleRate();
+    uint32_t framesPerBuffer = paFramesPerBufferUnspecified;
+
+    #ifdef __arm__
+    framesPerBuffer = 256;
+    outParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultHighOutputLatency;
+    #endif
 
     errCode = Pa_OpenStream(&mStream, NULL, &outParams, sampleRate,
-                            paFramesPerBufferUnspecified, paNoFlag, cb, this);
+                            framesPerBuffer, paNoFlag, cb, this);
     if (errCode != paNoError) {
       std::string err = std::string("Could not open stream: ") + Pa_GetErrorText(errCode);
       Nan::ThrowError(err.c_str());
@@ -267,7 +274,7 @@ class QuitOutWorker : public Nan::AsyncWorker {
 };
 
 AudioOut::AudioOut(Local<Object> options) { 
-  mOutContext = std::make_shared<OutContext>(std::make_shared<AudioOptions>(options), OutCallback, 2);
+  mOutContext = std::make_shared<OutContext>(std::make_shared<AudioOptions>(options), OutCallback);
 }
 AudioOut::~AudioOut() {}
 
