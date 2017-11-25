@@ -80,7 +80,7 @@ public:
 
     #ifdef __arm__
     framesPerBuffer = 256;
-    inParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultHighInputLatency;
+    inParams.suggestedLatency = Pa_GetDeviceInfo(inParams.device)->defaultHighInputLatency;
     #endif
 
     errCode = Pa_OpenStream(&mStream, &inParams, NULL, sampleRate,
@@ -90,7 +90,7 @@ public:
       Nan::ThrowError(err.c_str());
     }
   }
-  
+
   ~InContext() {
     Pa_StopStream(mStream);
     Pa_Terminate();
@@ -158,8 +158,8 @@ private:
   std::condition_variable cv;
 };
 
-int InCallback(const void *input, void *output, unsigned long frameCount, 
-               const PaStreamCallbackTimeInfo *timeInfo, 
+int InCallback(const void *input, void *output, unsigned long frameCount,
+               const PaStreamCallbackTimeInfo *timeInfo,
                PaStreamCallbackFlags statusFlags, void *userData) {
   InContext *context = (InContext *)userData;
   context->checkStatus(statusFlags);
@@ -223,7 +223,7 @@ class QuitInWorker : public Nan::AsyncWorker {
     std::shared_ptr<InContext> mInContext;
 };
 
-AudioIn::AudioIn(Local<Object> options) { 
+AudioIn::AudioIn(Local<Object> options) {
   mInContext = std::make_shared<InContext>(std::make_shared<AudioOptions>(options), InCallback);
 }
 AudioIn::~AudioIn() {}
