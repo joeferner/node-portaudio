@@ -16,18 +16,18 @@
 #ifndef PERSIST_H
 #define PERSIST_H
 
-#include <memory>
+#include <napi.h>
 
 namespace streampunk {
 
 class Persist {
 public:
-  Persist(v8::Local<v8::Object> object) 
-    : mPersistObj(object) {}
+  Persist(Napi::Object object) 
+    : mPersistObj(Napi::Persistent(object)) {}
   ~Persist() { mPersistObj.Reset(); }
 
 private:
-  Nan::Persistent<v8::Object> mPersistObj;
+  Napi::ObjectReference mPersistObj;
 };
 
 } // namespace streampunk
