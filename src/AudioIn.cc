@@ -80,7 +80,7 @@ public:
 
     #ifdef __arm__
     framesPerBuffer = 256;
-    inParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultHighInputLatency;
+    inParams.suggestedLatency = Pa_GetDeviceInfo(inParams.device)->defaultHighInputLatency;
     #endif
 
     errCode = Pa_OpenStream(&mStream, &inParams, NULL, sampleRate,
