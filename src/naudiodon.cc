@@ -13,16 +13,17 @@
   limitations under the License.
 */
 
-#include <napi.h>
+#include <nan.h>
 #include "GetDevices.h"
 #include "AudioIn.h"
 #include "AudioOut.h"
 
-Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
-  exports.Set(Napi::String::New(env, "getDevices"), Napi::Function::New(env, streampunk::GetDevices));
-  streampunk::AudioIn::Init(env, exports);
-  streampunk::AudioOut::Init(env, exports);
-  return exports;
+NAN_MODULE_INIT(Init) {
+  Nan::Set(target, Nan::New("getDevices").ToLocalChecked(),
+    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(streampunk::GetDevices)).ToLocalChecked());
+
+  streampunk::AudioIn::Init(target);
+  streampunk::AudioOut::Init(target);
 }
 
-NODE_API_MODULE(portAudio, InitAll);
+NODE_MODULE(portAudio, Init);

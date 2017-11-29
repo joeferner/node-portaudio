@@ -13,6 +13,7 @@
   limitations under the License.
 */
 
+#include <nan.h>
 #include "AudioIn.h"
 #include "Persist.h"
 #include "Params.h"
@@ -22,12 +23,12 @@
 #include <map>
 #include <portaudio.h>
 
+using namespace v8;
+
 namespace streampunk {
 
-Napi::FunctionReference AudioIn::constructor;
-
 static std::map<char*, std::shared_ptr<Memory> > outstandingAllocs;
-static void freeAllocCb(Napi::Env env, char* data) {
+static void freeAllocCb(char* data, void* hint) {
   std::map<char*, std::shared_ptr<Memory> >::iterator it = outstandingAllocs.find(data);
   if (it != outstandingAllocs.end())
     outstandingAllocs.erase(it);
@@ -35,13 +36,13 @@ static void freeAllocCb(Napi::Env env, char* data) {
 
 class InContext {
 public:
-  InContext(Napi::Env env, std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb)
+  InContext(std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb)
     : mActive(true), mAudioOptions(audioOptions), mChunkQueue(mAudioOptions->maxQueue()) {
 
     PaError errCode = Pa_Initialize();
     if (errCode != paNoError) {
       std::string err = std::string("Could not initialize PortAudio: ") + Pa_GetErrorText(errCode);
-      throw Napi::Error::New(env, err.c_str());
+      Nan::ThrowError(err.c_str());
     }
 
     printf("Input %s\n", mAudioOptions->toString().c_str());
@@ -55,13 +56,12 @@ public:
     else
       inParams.device = Pa_GetDefaultInputDevice();
     if (inParams.device == paNoDevice)
-      throw Napi::Error::New(env, "No default input device");
-
+      Nan::ThrowError("No default input device");
     printf("Input device name is %s\n", Pa_GetDeviceInfo(inParams.device)->name);
 
     inParams.channelCount = mAudioOptions->channelCount();
     if (inParams.channelCount > Pa_GetDeviceInfo(inParams.device)->maxInputChannels)
-      throw Napi::Error::New(env, "Channel count exceeds maximum number of input channels for device");
+      Nan::ThrowError("Channel count exceeds maximum number of input channels for device");
 
     uint32_t sampleFormat = mAudioOptions->sampleFormat();
     switch(sampleFormat) {
@@ -69,7 +69,7 @@ public:
     case 16: inParams.sampleFormat = paInt16; break;
     case 24: inParams.sampleFormat = paInt24; break;
     case 32: inParams.sampleFormat = paInt32; break;
-    default: throw Napi::Error::New(env, "Invalid sampleFormat");
+    default: Nan::ThrowError("Invalid sampleFormat");
     }
 
     inParams.suggestedLatency = Pa_GetDeviceInfo(inParams.device)->defaultLowInputLatency;
@@ -87,20 +87,20 @@ public:
                             framesPerBuffer, paNoFlag, cb, this);
     if (errCode != paNoError) {
       std::string err = std::string("Could not open stream: ") + Pa_GetErrorText(errCode);
-      throw Napi::Error::New(env, err.c_str());
+      Nan::ThrowError(err.c_str());
     }
   }
-  
+
   ~InContext() {
     Pa_StopStream(mStream);
     Pa_Terminate();
   }
 
-  void start(Napi::Env env) {
+  void start() {
     PaError errCode = Pa_StartStream(mStream);
     if (errCode != paNoError) {
       std::string err = std::string("Could not start input stream: ") + Pa_GetErrorText(errCode);
-      throw Napi::Error::New(env, err.c_str());
+      return Nan::ThrowError(err.c_str());
     }
   }
 
@@ -158,17 +158,17 @@ private:
   std::condition_variable cv;
 };
 
-int InCallback(const void *input, void *output, unsigned long frameCount, 
-               const PaStreamCallbackTimeInfo *timeInfo, 
+int InCallback(const void *input, void *output, unsigned long frameCount,
+               const PaStreamCallbackTimeInfo *timeInfo,
                PaStreamCallbackFlags statusFlags, void *userData) {
   InContext *context = (InContext *)userData;
   context->checkStatus(statusFlags);
   return context->readBuffer(input, frameCount) ? paContinue : paComplete;
 }
 
-class InWorker : public Napi::AsyncWorker {
+class InWorker : public Nan::AsyncWorker {
   public:
-    InWorker(std::shared_ptr<InContext> InContext, const Napi::Function& callback)
+    InWorker(std::shared_ptr<InContext> InContext, Nan::Callback *callback)
       : AsyncWorker(callback), mInContext(InContext)
     { }
     ~InWorker() {}
@@ -177,26 +177,23 @@ class InWorker : public Napi::AsyncWorker {
       mInChunk = mInContext->readChunk();
     }
 
-    void OnOK() {
-      Napi::HandleScope scope(Env());
+    void HandleOKCallback () {
+      Nan::HandleScope scope;
 
       std::string errStr;
       if (mInContext->getErrStr(errStr)) {
-        std::vector<napi_value> args;
-        args.push_back(Napi::String::New(Env(), errStr.c_str()));
-        Callback().Call(args);
+        Local<Value> argv[] = { Nan::Error(errStr.c_str()) };
+        callback->Call(1, argv);
       }
 
-      std::vector<napi_value> args;
-      args.push_back(Env().Null());
       if (mInChunk) {
         outstandingAllocs.insert(make_pair((char*)mInChunk->buf(), mInChunk));
-        Napi::Object buf = Napi::Buffer<char>::New(Env(), (char*)mInChunk->buf(), mInChunk->numBytes(), freeAllocCb);
-        args.push_back(buf);
-        Callback().Call(args);
+        Nan::MaybeLocal<Object> maybeBuf = Nan::NewBuffer((char*)mInChunk->buf(), mInChunk->numBytes(), freeAllocCb, 0);
+        Local<Value> argv[] = { Nan::Null(), maybeBuf.ToLocalChecked() };
+        callback->Call(2, argv);
       } else {
-        args.push_back(Env().Null());
-        Callback().Call(args);
+        Local<Value> argv[] = { Nan::Null(), Nan::Null() };
+        callback->Call(2, argv);
       }
     }
 
@@ -205,9 +202,9 @@ class InWorker : public Napi::AsyncWorker {
     std::shared_ptr<Memory> mInChunk;
 };
 
-class QuitInWorker : public Napi::AsyncWorker {
+class QuitInWorker : public Nan::AsyncWorker {
   public:
-    QuitInWorker(std::shared_ptr<InContext> InContext, const Napi::Function& callback)
+    QuitInWorker(std::shared_ptr<InContext> InContext, Nan::Callback *callback)
       : AsyncWorker(callback), mInContext(InContext)
     { }
     ~QuitInWorker() {}
@@ -216,77 +213,70 @@ class QuitInWorker : public Napi::AsyncWorker {
       mInContext->quit();
     }
 
-    void OnOK() {
-      Napi::HandleScope scope(Env());
+    void HandleOKCallback () {
+      Nan::HandleScope scope;
       mInContext->stop();
-      Callback().Call(std::vector<napi_value>());
+      callback->Call(0, NULL);
     }
 
   private:
     std::shared_ptr<InContext> mInContext;
 };
 
-AudioIn::AudioIn(const Napi::CallbackInfo& info) 
-  : Napi::ObjectWrap<AudioIn>(info) {
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-
-  if ((info.Length() != 1) || !info[0].IsObject())
-    throw Napi::Error::New(env, "AudioIn constructor expects an options object argument");
-
-  Napi::Object options = info[0].As<Napi::Object>();
-  mInContext = std::make_shared<InContext>(env, std::make_shared<AudioOptions>(env, options), InCallback);
+AudioIn::AudioIn(Local<Object> options) {
+  mInContext = std::make_shared<InContext>(std::make_shared<AudioOptions>(options), InCallback);
 }
 AudioIn::~AudioIn() {}
 
-Napi::Value AudioIn::Start(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-  mInContext->start(env);
-  return env.Undefined();
+void AudioIn::doStart() { mInContext->start(); }
+
+NAN_METHOD(AudioIn::Start) {
+  AudioIn* obj = Nan::ObjectWrap::Unwrap<AudioIn>(info.Holder());
+  obj->doStart();
+  info.GetReturnValue().SetUndefined();
 }
 
-Napi::Value AudioIn::Read(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
+NAN_METHOD(AudioIn::Read) {
   if (info.Length() != 2)
-    throw Napi::Error::New(env, "AudioIn Read expects 2 arguments");
-  if (!info[0].IsNumber())
-    throw Napi::TypeError::New(env, "AudioIn Read expects a valid advisory size as the first parameter");
-  if (!info[1].IsFunction())
-    throw Napi::TypeError::New(env, "AudioIn Read expects a valid callback as the second parameter");
+    return Nan::ThrowError("AudioIn Read expects 2 arguments");
+  if (!info[0]->IsNumber())
+    return Nan::ThrowError("AudioIn Read requires a valid advisory size as the first parameter");
+  if (!info[1]->IsFunction())
+    return Nan::ThrowError("AudioIn Read requires a valid callback as the second parameter");
 
-  Napi::Function callback = info[1].As<Napi::Function>();
-  napi_queue_async_work(env, napi_async_work(*new InWorker(mInContext, callback)));
-  return env.Undefined();
+  // uint32_t sizeAdv = Nan::To<uint32_t>(info[0]).FromJust();
+  Local<Function> callback = Local<Function>::Cast(info[1]);
+  AudioIn* obj = Nan::ObjectWrap::Unwrap<AudioIn>(info.Holder());
+
+  AsyncQueueWorker(new InWorker(obj->getContext(), new Nan::Callback(callback)));
+  info.GetReturnValue().SetUndefined();
 }
 
-Napi::Value AudioIn::Quit(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
+NAN_METHOD(AudioIn::Quit) {
   if (info.Length() != 1)
-    throw Napi::Error::New(env, "AudioIn Quit expects 1 argument");
-  if (!info[0].IsFunction())
-    throw Napi::TypeError::New(env, "AudioIn Quit expects a valid callback as the parameter");
+    return Nan::ThrowError("AudioIn Quit expects 1 argument");
+  if (!info[0]->IsFunction())
+    return Nan::ThrowError("AudioIn Quit requires a valid callback as the parameter");
 
-  Napi::Function callback = info[0].As<Napi::Function>();
-  napi_queue_async_work(env, napi_async_work(*new QuitInWorker(mInContext, callback)));
-  return env.Undefined();
+  Local<Function> callback = Local<Function>::Cast(info[0]);
+  AudioIn* obj = Nan::ObjectWrap::Unwrap<AudioIn>(info.Holder());
+
+  AsyncQueueWorker(new QuitInWorker(obj->getContext(), new Nan::Callback(callback)));
+  info.GetReturnValue().SetUndefined();
 }
 
-void AudioIn::Init(Napi::Env env, Napi::Object exports) {
-  Napi::HandleScope scope(env);
+NAN_MODULE_INIT(AudioIn::Init) {
+  Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
+  tpl->SetClassName(Nan::New("AudioIn").ToLocalChecked());
+  tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
-  Napi::Function func = DefineClass(env, "AudioIn", {
-    InstanceMethod("start", &AudioIn::Start),
-    InstanceMethod("read", &AudioIn::Read),
-    InstanceMethod("quit", &AudioIn::Quit)
-  });
+  SetPrototypeMethod(tpl, "start", Start);
+  SetPrototypeMethod(tpl, "read", Read);
+  SetPrototypeMethod(tpl, "quit", Quit);
 
-  constructor = Napi::Persistent(func);
-  constructor.SuppressDestruct();
-
-  exports.Set("AudioIn", func);
+  constructor().Reset(Nan::GetFunction(tpl).ToLocalChecked());
+  Nan::Set(target, Nan::New("AudioIn").ToLocalChecked(),
+    Nan::GetFunction(tpl).ToLocalChecked());
 }
 
 } // namespace streampunk
