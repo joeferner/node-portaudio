@@ -5,7 +5,7 @@ A [Node.js](http://nodejs.org/) [addon](http://nodejs.org/api/addons.html) that 
 This is a fork of [node-portaudio](/joeferner/node-portaudio), refactored by:
 
 * changing from an event model to a stream model;
-* using the new API for building native Addons [N-API](https://nodejs.org/dist/latest-v8.x/docs/api/n-api.html#n_api_n_api) to enable portability between node versions without recompiling.
+* linking to the v8 libraries through the [Native Abstractions for Node.js (NAN)](/nodejs/nan) library to enable more portability between node versions.
 * adding in local copies of libraries so that portaudio does not have to be installed preemptively.
 
 Little of the original remains but I am very grateful for Joe Ferner for the inspiration and framework to get started.
@@ -86,7 +86,7 @@ var ao = new portAudio.AudioOutput({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
   sampleRate: 48000,
-  deviceId: -1 // Use -1 or omit the deviceId to select the default device
+  deviceId : -1 // Use -1 or omit the deviceId to select the default device
 });
 
 // handle errors from the AudioOutput
@@ -95,6 +95,9 @@ ao.on('error', err => console.error);
 // Create a stream to pipe into the AudioOutput
 // Note that this does not strip the WAV header so a click will be heard at the beginning
 var rs = fs.createReadStream('steam_48000.wav');
+
+// setup to close the output stream at the end of the read stream
+rs.on('end', () => ao.end());
 
 // Start piping data and start streaming
 rs.pipe(ao);
@@ -114,7 +117,7 @@ var ai = new portAudio.AudioInput({
   channelCount: 2,
   sampleFormat: portAudio.SampleFormat16Bit,
   sampleRate: 44100
-  deviceId: -1 // Use -1 or omit the deviceId to select the default device
+  deviceId : -1 // Use -1 or omit the deviceId to select the default device
 });
 
 // handle errors from the AudioInput

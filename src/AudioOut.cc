@@ -13,6 +13,7 @@
   limitations under the License.
 */
 
+#include <nan.h>
 #include "AudioOut.h"
 #include "Persist.h"
 #include "Params.h"
@@ -21,15 +22,15 @@
 #include <condition_variable>
 #include <portaudio.h>
 
-namespace streampunk {
+using namespace v8;
 
-Napi::FunctionReference AudioOut::constructor;
+namespace streampunk {
 
 class AudioChunk {
 public:
-  AudioChunk (Napi::Object chunk)
+  AudioChunk (Local<Object> chunk)
     : mPersistentChunk(new Persist(chunk)),
-      mChunk(Memory::makeNew((uint8_t *)chunk.As<Napi::Buffer<char>>().Data(), (uint32_t)chunk.As<Napi::Buffer<char>>().Length()))
+      mChunk(Memory::makeNew((uint8_t *)node::Buffer::Data(chunk), (uint32_t)node::Buffer::Length(chunk)))
     { }
   ~AudioChunk() { }
   
@@ -42,14 +43,14 @@ private:
 
 class OutContext {
 public:
-  OutContext(Napi::Env env, std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb)
+  OutContext(std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb)
     : mAudioOptions(audioOptions), mChunkQueue(mAudioOptions->maxQueue()), 
       mCurOffset(0), mActive(true), mFinished(false) {
 
     PaError errCode = Pa_Initialize();
     if (errCode != paNoError) {
       std::string err = std::string("Could not initialize PortAudio: ") + Pa_GetErrorText(errCode);
-      throw Napi::Error::New(env, err.c_str());
+      Nan::ThrowError(err.c_str());
     }
 
     printf("Output %s\n", mAudioOptions->toString().c_str());
@@ -63,14 +64,12 @@ public:
     else
       outParams.device = Pa_GetDefaultOutputDevice();
     if (outParams.device == paNoDevice)
-      throw Napi::Error::New(env, "No default output device");
-
+      Nan::ThrowError("No default output device");
     printf("Output device name is %s\n", Pa_GetDeviceInfo(outParams.device)->name);
 
     outParams.channelCount = mAudioOptions->channelCount();
     if (outParams.channelCount > Pa_GetDeviceInfo(outParams.device)->maxOutputChannels)
-      throw Napi::Error::New(env, "Channel count exceeds maximum number of output channels for device");
-
+      Nan::ThrowError("Channel count exceeds maximum number of output channels for device");
 
     uint32_t sampleFormat = mAudioOptions->sampleFormat();
     switch(sampleFormat) {
@@ -78,7 +77,7 @@ public:
     case 16: outParams.sampleFormat = paInt16; break;
     case 24: outParams.sampleFormat = paInt24; break;
     case 32: outParams.sampleFormat = paInt32; break;
-    default: throw Napi::Error::New(env, "Invalid sampleFormat");
+    default: Nan::ThrowError("Invalid sampleFormat");
     }
 
     outParams.suggestedLatency = Pa_GetDeviceInfo(outParams.device)->defaultLowOutputLatency;
@@ -96,7 +95,7 @@ public:
                             framesPerBuffer, paNoFlag, cb, this);
     if (errCode != paNoError) {
       std::string err = std::string("Could not open stream: ") + Pa_GetErrorText(errCode);
-      throw Napi::Error::New(env, err.c_str());
+      Nan::ThrowError(err.c_str());
     }
   }
   
@@ -105,11 +104,11 @@ public:
     Pa_Terminate();
   }
 
-  void start(Napi::Env env) {
+  void start() {
     PaError errCode = Pa_StartStream(mStream);
     if (errCode != paNoError) {
       std::string err = std::string("Could not start output stream: ") + Pa_GetErrorText(errCode);
-      throw Napi::Error::New(env, err.c_str());
+      return Nan::ThrowError(err.c_str());
     }
   }
 
@@ -226,9 +225,9 @@ int OutCallback(const void *input, void *output, unsigned long frameCount,
   return context->fillBuffer(output, frameCount) ? paContinue : paComplete;
 }
 
-class OutWorker : public Napi::AsyncWorker {
+class OutWorker : public Nan::AsyncWorker {
   public:
-    OutWorker(std::shared_ptr<OutContext> OutContext, std::shared_ptr<AudioChunk> audioChunk, const Napi::Function& callback)
+    OutWorker(std::shared_ptr<OutContext> OutContext, Nan::Callback *callback, std::shared_ptr<AudioChunk> audioChunk)
       : AsyncWorker(callback), mOutContext(OutContext), mAudioChunk(audioChunk) 
     { }
     ~OutWorker() {}
@@ -237,15 +236,15 @@ class OutWorker : public Napi::AsyncWorker {
       mOutContext->addChunk(mAudioChunk);
     }
 
-    void OnOK() {
-      Napi::HandleScope scope(Env());
+    void HandleOKCallback () {
+      Nan::HandleScope scope;
       std::string errStr;
       if (mOutContext->getErrStr(errStr)) {
-        std::vector<napi_value> args;
-        args.push_back(Napi::String::New(Env(), errStr.c_str()));
-        Callback().Call(args);
-      } else
-        Callback().Call(std::vector<napi_value>());
+        Local<Value> argv[] = { Nan::Error(errStr.c_str()) };
+        callback->Call(1, argv);
+      } else {
+        callback->Call(0, NULL);
+      }
     }
 
   private:
@@ -253,9 +252,9 @@ class OutWorker : public Napi::AsyncWorker {
     std::shared_ptr<AudioChunk> mAudioChunk;
 };
 
-class QuitOutWorker : public Napi::AsyncWorker {
+class QuitOutWorker : public Nan::AsyncWorker {
   public:
-    QuitOutWorker(std::shared_ptr<OutContext> OutContext, const Napi::Function& callback)
+    QuitOutWorker(std::shared_ptr<OutContext> OutContext, Nan::Callback *callback)
       : AsyncWorker(callback), mOutContext(OutContext)
     { }
     ~QuitOutWorker() {}
@@ -264,78 +263,70 @@ class QuitOutWorker : public Napi::AsyncWorker {
       mOutContext->quit();
     }
 
-    void OnOK() {
-      Napi::HandleScope scope(Env());
+    void HandleOKCallback () {
+      Nan::HandleScope scope;
       mOutContext->stop();
-      Callback().Call(std::vector<napi_value>());
+      callback->Call(0, NULL);
     }
 
   private:
     std::shared_ptr<OutContext> mOutContext;
 };
 
-AudioOut::AudioOut(const Napi::CallbackInfo& info)
-  : Napi::ObjectWrap<AudioOut>(info) {
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-
-  if ((info.Length() != 1) || !info[0].IsObject())
-    throw Napi::TypeError::New(env, "AudioOut constructor expects an options object argument");
-
-  Napi::Object options = info[0].As<Napi::Object>();
-  mOutContext = std::make_shared<OutContext>(env, std::make_shared<AudioOptions>(env, options), OutCallback);
+AudioOut::AudioOut(Local<Object> options) { 
+  mOutContext = std::make_shared<OutContext>(std::make_shared<AudioOptions>(options), OutCallback);
 }
 AudioOut::~AudioOut() {}
 
-Napi::Value AudioOut::Start(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
-  mOutContext->start(env);
-  return env.Undefined();
+void AudioOut::doStart() { mOutContext->start(); }
+
+NAN_METHOD(AudioOut::Start) {
+  AudioOut* obj = Nan::ObjectWrap::Unwrap<AudioOut>(info.Holder());
+  obj->doStart();
+  info.GetReturnValue().SetUndefined();
 }
 
-Napi::Value AudioOut::Write(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
+NAN_METHOD(AudioOut::Write) {
   if (info.Length() != 2)
-    throw Napi::Error::New(env, "AudioOut Write expects 2 arguments");
-  if (!info[0].IsObject())
-    throw Napi::TypeError::New(env, "AudioOut Write expects a valid chunk buffer as the first parameter");
-  if (!info[1].IsFunction())
-    throw Napi::TypeError::New(env, "AudioOut Write expects a valid callback as the second parameter");
+    return Nan::ThrowError("AudioOut Write expects 2 arguments");
+  if (!info[0]->IsObject())
+    return Nan::ThrowError("AudioOut Write requires a valid chunk buffer as the first parameter");
+  if (!info[1]->IsFunction())
+    return Nan::ThrowError("AudioOut Write requires a valid callback as the second parameter");
 
-  Napi::Object chunkObj = info[0].As<Napi::Object>();
-  Napi::Function callback = info[1].As<Napi::Function>();
-  napi_queue_async_work(env, napi_async_work(*new OutWorker(mOutContext, std::make_shared<AudioChunk>(chunkObj), callback)));
-  return env.Undefined();
+  Local<Object> chunkObj = Local<Object>::Cast(info[0]);
+  Local<Function> callback = Local<Function>::Cast(info[1]);
+  AudioOut* obj = Nan::ObjectWrap::Unwrap<AudioOut>(info.Holder());
+
+  AsyncQueueWorker(new OutWorker(obj->getContext(), new Nan::Callback(callback), std::make_shared<AudioChunk>(chunkObj)));
+  info.GetReturnValue().SetUndefined();
 }
 
-Napi::Value AudioOut::Quit(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
+NAN_METHOD(AudioOut::Quit) {
   if (info.Length() != 1)
-    throw Napi::Error::New(env, "AudioOut Quit expects 1 argument");
-  if (!info[0].IsFunction())
-    throw Napi::TypeError::New(env, "AudioOut Quit expects a valid callback as the parameter");
+    return Nan::ThrowError("AudioOut Quit expects 1 argument");
+  if (!info[0]->IsFunction())
+    return Nan::ThrowError("AudioOut Quit requires a valid callback as the parameter");
 
-  Napi::Function callback = info[0].As<Napi::Function>();
-  napi_queue_async_work(env, napi_async_work(*new QuitOutWorker(mOutContext, callback)));
-  return env.Undefined();
+  Local<Function> callback = Local<Function>::Cast(info[0]);
+  AudioOut* obj = Nan::ObjectWrap::Unwrap<AudioOut>(info.Holder());
+
+  AsyncQueueWorker(new QuitOutWorker(obj->getContext(), new Nan::Callback(callback)));
+  info.GetReturnValue().SetUndefined();
 }
 
-void AudioOut::Init(Napi::Env env, Napi::Object exports) {
-  Napi::HandleScope scope(env);
+NAN_MODULE_INIT(AudioOut::Init) {
+  Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
+  tpl->SetClassName(Nan::New("AudioOut").ToLocalChecked());
+  tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
-  Napi::Function func = DefineClass(env, "AudioOut", {
-    InstanceMethod("start", &AudioOut::Start),
-    InstanceMethod("write", &AudioOut::Write),
-    InstanceMethod("quit", &AudioOut::Quit)
-  });
+  SetPrototypeMethod(tpl, "start", Start);
+  SetPrototypeMethod(tpl, "write", Write);
+  SetPrototypeMethod(tpl, "quit", Quit);
 
-  constructor = Napi::Persistent(func);
-  constructor.SuppressDestruct();
-
-  exports.Set("AudioOut", func);
+  constructor().Reset(Nan::GetFunction(tpl).ToLocalChecked());
+  Nan::Set(target, Nan::New("AudioOut").ToLocalChecked(),
+    Nan::GetFunction(tpl).ToLocalChecked());
 }
 
 } // namespace streampunk

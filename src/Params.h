@@ -16,10 +16,10 @@
 #ifndef PARAMS_H
 #define PARAMS_H
 
-#include <napi.h>
+#include <nan.h>
 #include <sstream>
 
-using namespace Napi;
+using namespace v8;
 
 namespace streampunk {
 
@@ -28,35 +28,40 @@ protected:
   Params() {}
   virtual ~Params() {}
 
-  Napi::Value getKey(Napi::Env env, Napi::Object tags, const std::string& key) {
-    Napi::Value val = env.Null();
-    Napi::String keyStr = Napi::String::New(env, key);
-    if ((tags).Has(keyStr))
-      val = (tags).Get(keyStr);
+  Local<Value> getKey(Local<Object> tags, const std::string& key) {
+    Local<Value> val = Nan::Null();
+    Local<String> keyStr = Nan::New<String>(key).ToLocalChecked();
+    if (Nan::Has(tags, keyStr).FromJust())
+      val = Nan::Get(tags, keyStr).ToLocalChecked();
     return val;
   }
 
-  bool unpackBool(Napi::Env env, Napi::Object tags, const std::string& key, bool dflt) {
+  std::string unpackValue(Local<Value> val) {
+    Local<Array> valueArray = Local<Array>::Cast(val);
+    return *String::Utf8Value(valueArray->Get(0));
+  }
+
+  bool unpackBool(Local<Object> tags, const std::string& key, bool dflt) {
     bool result = dflt;
-    Napi::Value val = getKey(env, tags, key);
-    if ((env.Null() != val) && val.IsBoolean())
-      result = val.As<Napi::Boolean>().Value();
+    Local<Value> val = getKey(tags, key);
+    if (Nan::Null() != val)
+      result = Nan::To<bool>(val).FromJust();
     return result;
   }
 
-  uint32_t unpackNum(Napi::Env env, Napi::Object tags, const std::string& key, uint32_t dflt) {
+  uint32_t unpackNum(Local<Object> tags, const std::string& key, uint32_t dflt) {
     uint32_t result = dflt;
-    Napi::Value val = getKey(env, tags, key);
-    if ((env.Null() != val) && val.IsNumber())
-      result = val.As<Napi::Number>().Uint32Value();
+    Local<Value> val = getKey(tags, key);
+    if (Nan::Null() != val)
+      result = Nan::To<uint32_t>(val).FromJust();
     return result;
   } 
 
-  std::string unpackStr(Napi::Env env, Napi::Object tags, const std::string& key, std::string dflt) {
+  std::string unpackStr(Local<Object> tags, const std::string& key, std::string dflt) {
     std::string result = dflt;
-    Napi::Value val = getKey(env, tags, key);
-    if ((env.Null() != val) && val.IsString())
-      result = val.As<Napi::String>().Utf8Value();
+    Local<Value> val = getKey(tags, key);
+    if (Nan::Null() != val)
+      result = *String::Utf8Value(val);
     return result;
   } 
 
@@ -67,12 +72,12 @@ private:
 
 class AudioOptions : public Params {
 public:
-  AudioOptions(Napi::Env env, Napi::Object tags)
-    : mDeviceID(unpackNum(env, tags, "deviceId", 0xffffffff)),
-      mSampleRate(unpackNum(env, tags, "sampleRate", 44100)),
-      mChannelCount(unpackNum(env, tags, "channelCount", 2)),
-      mSampleFormat(unpackNum(env, tags, "sampleFormat", 8)),
-      mMaxQueue(unpackNum(env, tags, "maxQueue", 2))
+  AudioOptions(Local<Object> tags)
+    : mDeviceID(unpackNum(tags, "deviceId", 0xffffffff)),
+      mSampleRate(unpackNum(tags, "sampleRate", 44100)),
+      mChannelCount(unpackNum(tags, "channelCount", 2)),
+      mSampleFormat(unpackNum(tags, "sampleFormat", 8)),
+      mMaxQueue(unpackNum(tags, "maxQueue", 2))
   {}
   ~AudioOptions() {}
 

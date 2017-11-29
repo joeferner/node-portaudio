@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-"target_name": "naudiodon",
+      "target_name": "naudiodon",
       "sources": [
         "src/naudiodon.cc",
         "src/GetDevices.cc",
@@ -9,12 +9,8 @@
       	"src/AudioOut.cc"
       ],
       "include_dirs": [
-        "<!@(node -p \"require('node-addon-api').include\")",
-        "portaudio/include"
+        "<!(node -e \"require('nan')\")", "portaudio/include"
       ],
-      "dependencies": [
-        "<!(node -p \"require('node-addon-api').gyp\")"
-      ],  
       "conditions" : [
         [
           'OS=="mac"', {
@@ -74,14 +70,6 @@
           'OS=="linux"', {
             "conditions": [
               ['target_arch=="arm"', {
-                "cflags_cc!": [
-                  "-fno-rtti",
-                  "-fno-exceptions"
-                ],
-                "cflags_cc": [
-                  "-std=c++11",
-                  "-fexceptions"
-                ],
                 "link_settings": {
                   "libraries": [
                     "<@(module_root_dir)/build/Release/libportaudio.so.2" 
@@ -101,14 +89,6 @@
                 ]
               },
               { # ia32 or x64
-                "cflags_cc!": [
-                  "-fno-rtti",
-                  "-fno-exceptions"
-                 ],
-                 "cflags_cc": [
-                   "-std=c++11",
-                   "-fexceptions"
-                 ],
                 "link_settings": {
                   "libraries": [
                     "<@(module_root_dir)/build/Release/libportaudio.so.2"
