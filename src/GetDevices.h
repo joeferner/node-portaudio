@@ -18,7 +18,7 @@
 
 namespace streampunk {
 
-NAN_METHOD(GetDevices);
+Napi::Value GetDevices(const Napi::CallbackInfo& info);
 
 } // namespace streampunk
 
