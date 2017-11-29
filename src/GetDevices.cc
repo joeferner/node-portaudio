@@ -13,54 +13,43 @@
   limitations under the License.
 */
 
-#include <nan.h>
+#include <napi.h>
 #include "GetDevices.h"
-// #include <node_buffer.h>
-// #include <cstring>
 #include <portaudio.h>
 
 namespace streampunk {
 
-NAN_METHOD(GetDevices) {
+Napi::Value GetDevices(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
   uint32_t numDevices;
 
   PaError errCode = Pa_Initialize();
-  if(errCode != paNoError) {
+  if (errCode != paNoError) {
     std::string err = std::string("Could not initialize PortAudio: ") + Pa_GetErrorText(errCode);
-    Nan::ThrowError(err.c_str());
+    throw Napi::Error::New(env, err.c_str());
   }
 
   numDevices = Pa_GetDeviceCount();
-  v8::Local<v8::Array> result = Nan::New<v8::Array>(numDevices);
+  Napi::Array result = Napi::Array::New(env, numDevices);
 
   for (uint32_t i = 0; i < numDevices; ++i) {
     const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(i);
-    v8::Local<v8::Object> v8DeviceInfo = Nan::New<v8::Object>();
-    Nan::Set(v8DeviceInfo, Nan::New("id").ToLocalChecked(), Nan::New(i));
-    Nan::Set(v8DeviceInfo, Nan::New("name").ToLocalChecked(),
-      Nan::New(deviceInfo->name).ToLocalChecked());
-    Nan::Set(v8DeviceInfo, Nan::New("maxInputChannels").ToLocalChecked(),
-      Nan::New(deviceInfo->maxInputChannels));
-    Nan::Set(v8DeviceInfo, Nan::New("maxOutputChannels").ToLocalChecked(),
-      Nan::New(deviceInfo->maxOutputChannels));
-    Nan::Set(v8DeviceInfo, Nan::New("defaultSampleRate").ToLocalChecked(),
-      Nan::New(deviceInfo->defaultSampleRate));
-    Nan::Set(v8DeviceInfo, Nan::New("defaultLowInputLatency").ToLocalChecked(),
-      Nan::New(deviceInfo->defaultLowInputLatency));
-    Nan::Set(v8DeviceInfo, Nan::New("defaultLowOutputLatency").ToLocalChecked(),
-      Nan::New(deviceInfo->defaultLowOutputLatency));
-    Nan::Set(v8DeviceInfo, Nan::New("defaultHighInputLatency").ToLocalChecked(),
-      Nan::New(deviceInfo->defaultHighInputLatency));
-    Nan::Set(v8DeviceInfo, Nan::New("defaultHighOutputLatency").ToLocalChecked(),
-      Nan::New(deviceInfo->defaultHighOutputLatency));
-    Nan::Set(v8DeviceInfo, Nan::New("hostAPIName").ToLocalChecked(),
-      Nan::New(Pa_GetHostApiInfo(deviceInfo->hostApi)->name).ToLocalChecked());
-
-    Nan::Set(result, i, v8DeviceInfo);
+    Napi::Object v8DeviceInfo = Napi::Object::New(env);
+    v8DeviceInfo.Set(Napi::String::New(env, "id"), Napi::Number::New(env, i));
+    v8DeviceInfo.Set(Napi::String::New(env, "name"), Napi::String::New(env, deviceInfo->name));
+    v8DeviceInfo.Set(Napi::String::New(env, "maxInputChannels"), Napi::Number::New(env, deviceInfo->maxInputChannels));
+    v8DeviceInfo.Set(Napi::String::New(env, "maxOutputChannels"), Napi::Number::New(env, deviceInfo->maxOutputChannels));
+    v8DeviceInfo.Set(Napi::String::New(env, "defaultSampleRate"), Napi::Number::New(env, deviceInfo->defaultSampleRate));
+    v8DeviceInfo.Set(Napi::String::New(env, "defaultLowInputLatency"), Napi::Number::New(env, deviceInfo->defaultLowInputLatency));
+    v8DeviceInfo.Set(Napi::String::New(env, "defaultLowOutputLatency"), Napi::Number::New(env, deviceInfo->defaultLowOutputLatency));
+    v8DeviceInfo.Set(Napi::String::New(env, "defaultHighInputLatency"), Napi::Number::New(env, deviceInfo->defaultHighInputLatency));
+    v8DeviceInfo.Set(Napi::String::New(env, "defaultHighOutputLatency"), Napi::Number::New(env, deviceInfo->defaultHighOutputLatency));
+    v8DeviceInfo.Set(Napi::String::New(env, "hostAPIName"), Napi::String::New(env, Pa_GetHostApiInfo(deviceInfo->hostApi)->name));
+    result.Set(i, v8DeviceInfo);
   }
 
   Pa_Terminate();
-  info.GetReturnValue().Set(result);
+  return result;
 }
 
 } // namespace streampunk

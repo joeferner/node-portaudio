@@ -16,7 +16,6 @@
 #ifndef CHUNKQUEUE_H
 #define CHUNKQUEUE_H
 
-#include <nan.h>
 #include <queue>
 #include <mutex>
 #include <condition_variable>

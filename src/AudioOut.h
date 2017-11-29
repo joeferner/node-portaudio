@@ -16,47 +16,25 @@
 #ifndef AUDIOOUT_H
 #define AUDIOOUT_H
 
+#include <napi.h>
 #include "Memory.h"
 
 namespace streampunk {
 
 class OutContext;
 
-class AudioOut : public Nan::ObjectWrap {
+class AudioOut : public Napi::ObjectWrap<AudioOut> {
 public:
-  static NAN_MODULE_INIT(Init);
-
-  std::shared_ptr<OutContext> getContext() const { return mOutContext; }
-  void doStart();
-
-private:
-  explicit AudioOut(v8::Local<v8::Object> options);
+  static void Init(Napi::Env env, Napi::Object exports);
+  AudioOut(const Napi::CallbackInfo& info);
   ~AudioOut();
 
-  static NAN_METHOD(New) {
-    if (info.IsConstructCall()) {
-      if (!((info.Length() == 1) && (info[0]->IsObject())))
-        return Nan::ThrowError("AudioOut constructor requires a valid options object as the parameter");
-      v8::Local<v8::Object> options = v8::Local<v8::Object>::Cast(info[0]);
-      AudioOut *obj = new AudioOut(options);
-      obj->Wrap(info.This());
-      info.GetReturnValue().Set(info.This());
-    } else {
-      const int argc = 1;
-      v8::Local<v8::Value> argv[] = { info[0] };
-      v8::Local<v8::Function> cons = Nan::New(constructor());
-      info.GetReturnValue().Set(cons->NewInstance(Nan::GetCurrentContext(), argc, argv).ToLocalChecked());
-    }
-  }
+private:
+  static Napi::FunctionReference constructor;
 
-  static inline Nan::Persistent<v8::Function> & constructor() {
-    static Nan::Persistent<v8::Function> my_constructor;
-    return my_constructor;
-  }
-
-  static NAN_METHOD(Start);
-  static NAN_METHOD(Write);
-  static NAN_METHOD(Quit);
+  Napi::Value Start(const Napi::CallbackInfo& info);
+  Napi::Value Write(const Napi::CallbackInfo& info);
+  Napi::Value Quit(const Napi::CallbackInfo& info);
 
   std::shared_ptr<OutContext> mOutContext;
 };
