@@ -241,9 +241,9 @@ class OutWorker : public Nan::AsyncWorker {
       std::string errStr;
       if (mOutContext->getErrStr(errStr)) {
         Local<Value> argv[] = { Nan::Error(errStr.c_str()) };
-        callback->Call(1, argv);
+        callback->Call(1, argv, async_resource);
       } else {
-        callback->Call(0, NULL);
+        callback->Call(0, NULL, async_resource);
       }
     }
 
@@ -266,7 +266,7 @@ class QuitOutWorker : public Nan::AsyncWorker {
     void HandleOKCallback () {
       Nan::HandleScope scope;
       mOutContext->stop();
-      callback->Call(0, NULL);
+      callback->Call(0, NULL, async_resource);
     }
 
   private:

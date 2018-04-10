@@ -183,17 +183,17 @@ class InWorker : public Nan::AsyncWorker {
       std::string errStr;
       if (mInContext->getErrStr(errStr)) {
         Local<Value> argv[] = { Nan::Error(errStr.c_str()) };
-        callback->Call(1, argv);
+        callback->Call(1, argv, async_resource);
       }
 
       if (mInChunk) {
         outstandingAllocs.insert(make_pair((char*)mInChunk->buf(), mInChunk));
         Nan::MaybeLocal<Object> maybeBuf = Nan::NewBuffer((char*)mInChunk->buf(), mInChunk->numBytes(), freeAllocCb, 0);
         Local<Value> argv[] = { Nan::Null(), maybeBuf.ToLocalChecked() };
-        callback->Call(2, argv);
+        callback->Call(2, argv, async_resource);
       } else {
         Local<Value> argv[] = { Nan::Null(), Nan::Null() };
-        callback->Call(2, argv);
+        callback->Call(2, argv, async_resource);
       }
     }
 
@@ -216,7 +216,7 @@ class QuitInWorker : public Nan::AsyncWorker {
     void HandleOKCallback () {
       Nan::HandleScope scope;
       mInContext->stop();
-      callback->Call(0, NULL);
+      callback->Call(0, NULL, async_resource);
     }
 
   private:
