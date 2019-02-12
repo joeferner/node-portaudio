@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-"target_name": "naudiodon",
+      "target_name": "naudiodon",
       "sources": [
         "src/naudiodon.cc",
         "src/GetDevices.cc",
