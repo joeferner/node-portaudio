@@ -19,11 +19,12 @@
     "url": "git+https://github.com/Streampunk/naudiodon.git"
   },
   "dependencies": {
-    "bindings": "^1.3.0",
-    "node-addon-api": "^1.1.0"
+    "bindings": "^1.4.0",
+    "node-addon-api": "^1.1.0",
+    "segfault-handler": "^1.0.1"
   },
   "devDependencies": {
-    "tape": "^4.8.0"
+    "tape": "^4.10.0"
   },
   "author": "Streampunk Media Ltd",
   "license": "Apache-2.0",
