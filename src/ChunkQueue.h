@@ -42,8 +42,8 @@ public:
     while(mActive && qu.empty()) {
       cv.wait(lk);
     }
-    T val;
-    if (mActive) {
+    T val = 0;
+    if (!qu.empty()) {
       val = qu.front();
       qu.pop();
       cv.notify_one();
@@ -58,9 +58,9 @@ public:
 
   void quit() {
     std::lock_guard<std::mutex> lk(m);
+    mActive = false;
     if ((0 == qu.size()) || (qu.size() >= mMaxQueue)) {
       // ensure release of any blocked thread
-      mActive = false;
       cv.notify_all();
     }
   }
