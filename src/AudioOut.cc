@@ -52,6 +52,7 @@ public:
       throw Napi::Error::New(env, err.c_str());
     }
 
+    printf("%s\n", Pa_GetVersionInfo()->versionText);
     printf("Output %s\n", mAudioOptions->toString().c_str());
 
     PaStreamParameters outParams;
