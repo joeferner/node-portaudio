@@ -16,11 +16,11 @@ Note: This is a server side library. It is not intended as a means to play and r
 
 ## Installation
 
-Install [Node.js](http://nodejs.org/) for your platform. This software has been developed against the long term stable (LTS) release. For ease of installation with other node packages, this package includes a copy of the dependent PortAudio library and so has no prerequisites.
+Install [Node.js](http://nodejs.org/) for your platform and make sure that node is able to build native modules with [node-gyp](https://github.com/nodejs/node-gyp). This software has been developed against the long term stable (LTS) release. For ease of installation with other node packages, this package includes a copy of the dependent PortAudio library and so has no prerequisites.
 
 Naudiodon is designed to be `require`d to use from your own application to provide async processing. For example:
 
-    npm install --save naudiodon
+    npm install naudiodon
 
 For Raspberry Pi users, please note that this library is not intended for use with the internal sound card. Please use an external USB sound card or GPIO breakout board such as the [_Pi-DAC+ Full-HD Audio Card_](https://www.modmypi.com/raspberry-pi/breakout-boards/iqaudio/pi-dac-plus-full-hd-audio-card/?tag=pi-dac).
 
