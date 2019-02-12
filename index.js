@@ -18,8 +18,8 @@ const EventEmitter = require("events");
 const { Readable, Writable } = require('stream');
 const portAudioBindings = require("bindings")("naudiodon.node");
 
-// var SegfaultHandler = require('segfault-handler');
-// SegfaultHandler.registerHandler("crash.log");
+var SegfaultHandler = require('segfault-handler');
+SegfaultHandler.registerHandler("crash.log");
 
 exports.SampleFormat8Bit = 8;
 exports.SampleFormat16Bit = 16;
@@ -39,8 +39,10 @@ function AudioInput(options) {
     read: size => {
       this.AudioInAdon.read(size, (err, buf) => {
         if (err)
-          console.error(err);
-          // this.emit('error', err); // causes Streampunk Microphone node to exit early...
+          // console.error(err);
+          process.nextTick(() => this.emit('error', err));
+        else if (0 === buf.length)
+          this.push(null)
         else
           this.push(buf);
       });
