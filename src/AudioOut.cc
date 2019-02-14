@@ -18,7 +18,6 @@
 #include "Params.h"
 #include "ChunkQueue.h"
 #include <mutex>
-#include <condition_variable>
 #include <portaudio.h>
 
 namespace streampunk {
@@ -43,8 +42,7 @@ private:
 class OutContext {
 public:
   OutContext(Napi::Env env, std::shared_ptr<AudioOptions> audioOptions, PaStreamCallback *cb)
-    : mAudioOptions(audioOptions), mChunkQueue(mAudioOptions->maxQueue()), 
-      mCurOffset(0), mActive(true), mFinished(false) {
+    : mAudioOptions(audioOptions), mChunkQueue(mAudioOptions->maxQueue()), mCurOffset(0) {
 
     PaError errCode = Pa_Initialize();
     if (errCode != paNoError) {
@@ -103,6 +101,7 @@ public:
   
   ~OutContext() {
     Pa_StopStream(mStream);
+    Pa_CloseStream(mStream);
     Pa_Terminate();
   }
 
@@ -116,6 +115,7 @@ public:
 
   void stop() {
     Pa_StopStream(mStream);
+    Pa_CloseStream(mStream);
     Pa_Terminate();
   }
 
@@ -127,41 +127,31 @@ public:
     uint8_t *dst = (uint8_t *)buf;
     uint32_t bytesRemaining = frameCount * mAudioOptions->channelCount() * mAudioOptions->sampleFormat() / 8;
 
-    uint32_t active = isActive();
-    if (!active && (0 == mChunkQueue.size()) && 
-        (!mCurChunk || (mCurChunk && (bytesRemaining >= mCurChunk->chunk()->numBytes() - mCurOffset)))) {
-      if (mCurChunk) {
-        uint32_t bytesCopied = doCopy(mCurChunk->chunk(), dst, bytesRemaining);
-        uint32_t missingBytes = bytesRemaining - bytesCopied;
-        if (missingBytes > 0) {
-          printf("Finishing - %d bytes not available for the last output buffer\n", missingBytes);
-          memset(dst + bytesCopied, 0, missingBytes);
-        }
-      }
-      std::lock_guard<std::mutex> lk(m);
-      mFinished = true;
-      cv.notify_one();
-    } else {
-      while (bytesRemaining) {
-        if (!(mCurChunk && (mCurOffset < mCurChunk->chunk()->numBytes()))) {
-          mCurChunk = mChunkQueue.dequeue();
-          mCurOffset = 0;
-        }
-        if (mCurChunk) {
-          uint32_t bytesCopied = doCopy(mCurChunk->chunk(), dst, bytesRemaining);
-          bytesRemaining -= bytesCopied;
-          dst += bytesCopied;
-          mCurOffset += bytesCopied;
-        } else { // Deal with termination case of ChunkQueue being kicked and returning null chunk
-          std::lock_guard<std::mutex> lk(m);
-          mFinished = true;
-          cv.notify_one();
+    bool finished = false;
+    uint32_t bufOff = 0;
+    while (bytesRemaining) {
+      if (!mCurChunk || (mCurChunk && (mCurChunk->chunk()->numBytes() == mCurOffset))) {
+        mCurChunk = mChunkQueue.dequeue();
+        mCurOffset = 0;
+        if (!mCurChunk) {
+          printf("Finishing - %d bytes not available for the last output buffer\n", bytesRemaining);
+          memset(dst + bufOff, 0, bytesRemaining);
+          finished = true;
           break;
         }
       }
+
+      std::shared_ptr<Memory> curChunk = mCurChunk->chunk();
+      uint32_t curBytes = std::min<uint32_t>(bytesRemaining, curChunk->numBytes() - mCurOffset);
+      void *srcBuf = curChunk->buf() + mCurOffset;
+      memcpy(dst + bufOff, srcBuf, curBytes);
+
+      bufOff += curBytes;
+      mCurOffset += curBytes;
+      bytesRemaining -= curBytes;
     }
 
-    return !mFinished;
+    return !finished;
   }
 
   void checkStatus(uint32_t statusFlags) {
@@ -182,17 +172,11 @@ public:
   bool getErrStr(std::string& errStr) {
     std::lock_guard<std::mutex> lk(m);
     errStr = mErrStr;
-    mErrStr = std::string();
-    return errStr != std::string();
+    mErrStr.clear();
+    return !errStr.empty();
   }
 
-  void quit() {
-    std::unique_lock<std::mutex> lk(m);
-    mActive = false;
-    mChunkQueue.quit();
-    while(!mFinished)
-      cv.wait(lk);
-  }
+  void quit() { mChunkQueue.quit(); }
 
 private:
   std::shared_ptr<AudioOptions> mAudioOptions;
@@ -200,23 +184,8 @@ private:
   std::shared_ptr<AudioChunk> mCurChunk;
   PaStream* mStream;
   uint32_t mCurOffset;
-  bool mActive;
-  bool mFinished;
   std::string mErrStr;
-  mutable std::mutex m;
-  std::condition_variable cv;
-
-  bool isActive() const {
-    std::unique_lock<std::mutex> lk(m);
-    return mActive;
-  }
-
-  uint32_t doCopy(std::shared_ptr<Memory> chunk, void *dst, uint32_t numBytes) {
-    uint32_t curChunkBytes = chunk->numBytes() - mCurOffset;
-    uint32_t thisChunkBytes = std::min<uint32_t>(curChunkBytes, numBytes);
-    memcpy(dst, chunk->buf() + mCurOffset, thisChunkBytes);
-    return thisChunkBytes;
-  }
+  std::mutex m;
 };
 
 int OutCallback(const void *input, void *output, unsigned long frameCount, 
@@ -230,7 +199,7 @@ int OutCallback(const void *input, void *output, unsigned long frameCount,
 class OutWorker : public Napi::AsyncWorker {
   public:
     OutWorker(std::shared_ptr<OutContext> OutContext, std::shared_ptr<AudioChunk> audioChunk, const Napi::Function& callback)
-      : AsyncWorker(callback), mOutContext(OutContext), mAudioChunk(audioChunk) 
+      : AsyncWorker(callback, "AudioOut"), mOutContext(OutContext), mAudioChunk(audioChunk)
     { }
     ~OutWorker() {}
 
@@ -241,12 +210,10 @@ class OutWorker : public Napi::AsyncWorker {
     void OnOK() {
       Napi::HandleScope scope(Env());
       std::string errStr;
-      if (mOutContext->getErrStr(errStr)) {
-        std::vector<napi_value> args;
-        args.push_back(Napi::String::New(Env(), errStr.c_str()));
-        Callback().Call(args);
-      } else
-        Callback().Call(std::vector<napi_value>());
+      if (mOutContext->getErrStr(errStr))
+        Callback().Call({Napi::String::New(Env(), errStr)});
+      else
+        Callback().Call({Env().Null()});
     }
 
   private:
@@ -257,18 +224,18 @@ class OutWorker : public Napi::AsyncWorker {
 class QuitOutWorker : public Napi::AsyncWorker {
   public:
     QuitOutWorker(std::shared_ptr<OutContext> OutContext, const Napi::Function& callback)
-      : AsyncWorker(callback), mOutContext(OutContext)
+      : AsyncWorker(callback, "AudioQuitOut"), mOutContext(OutContext)
     { }
     ~QuitOutWorker() {}
 
     void Execute() {
+      mOutContext->stop();
       mOutContext->quit();
     }
 
     void OnOK() {
       Napi::HandleScope scope(Env());
-      mOutContext->stop();
-      Callback().Call(std::vector<napi_value>());
+      Callback().Call({});
     }
 
   private:
@@ -307,7 +274,9 @@ Napi::Value AudioOut::Write(const Napi::CallbackInfo& info) {
 
   Napi::Object chunkObj = info[0].As<Napi::Object>();
   Napi::Function callback = info[1].As<Napi::Function>();
-  napi_queue_async_work(env, napi_async_work(*new OutWorker(mOutContext, std::make_shared<AudioChunk>(chunkObj), callback)));
+
+  OutWorker *outWork = new OutWorker(mOutContext, std::make_shared<AudioChunk>(chunkObj), callback);
+  outWork->Queue();
   return env.Undefined();
 }
 
@@ -320,7 +289,8 @@ Napi::Value AudioOut::Quit(const Napi::CallbackInfo& info) {
     throw Napi::TypeError::New(env, "AudioOut Quit expects a valid callback as the parameter");
 
   Napi::Function callback = info[0].As<Napi::Function>();
-  napi_queue_async_work(env, napi_async_work(*new QuitOutWorker(mOutContext, callback)));
+  QuitOutWorker *quitWork = new QuitOutWorker(mOutContext, callback);
+  quitWork->Queue();
   return env.Undefined();
 }
 

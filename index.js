@@ -29,61 +29,72 @@ exports.SampleFormat32Bit = 32;
 exports.getDevices = portAudioBindings.getDevices;
 
 function AudioInput(options) {
-  if (!(this instanceof AudioInput))
-    return new AudioInput(options);
+  const audioInAdon = new portAudioBindings.AudioIn(options);
 
-  this.AudioInAdon = new portAudioBindings.AudioIn(options);
-  Readable.call(this, {
-    highWaterMark: 16384,
+  const audioInStream = new Readable({
+    highWaterMark: options.highwaterMark || 16384,
     objectMode: false,
     read: size => {
-      this.AudioInAdon.read(size, (err, buf) => {
+      audioInAdon.read(size, (err, buf) => {
         if (err)
-          // console.error(err);
-          process.nextTick(() => this.emit('error', err));
-        else if (0 === buf.length)
-          this.push(null)
-        else
-          this.push(buf);
+          process.nextTick(() => audioInStream.emit('error', err));
+        audioInStream.push(buf);
       });
     }
   });
 
-  this.start = () => this.AudioInAdon.start();
-  this.quit = cb => {
-    const quitCb = arguments[0];
-    this.AudioInAdon.quit(() => {
-      if (typeof quitCb === 'function')
-        quitCb();
+  audioInStream.start = () => audioInAdon.start();
+
+  audioInStream.quit = cb => {
+    audioInAdon.quit(() => {
+      if (typeof cb === 'function')
+        cb();
     });
   }
+
+  audioInStream.on('close', () => {
+    console.log('AudioIn close');
+    audioInStream.quit();
+  });
+  audioInStream.on('end', () => console.log('AudioIn end'));
+  audioInStream.on('error', err => console.error('AudioIn:', err));
+
+  return audioInStream;
 }
-util.inherits(AudioInput, Readable);
 exports.AudioInput = AudioInput;
 
 function AudioOutput(options) {
-  if (!(this instanceof AudioOutput))
-    return new AudioOutput(options);
+  audioOutAdon = new portAudioBindings.AudioOut(options);
 
-  let Active = true;
-  this.AudioOutAdon = new portAudioBindings.AudioOut(options);
-  Writable.call(this, {
-    highWaterMark: 16384,
+  const audioOutStream = new Writable({
+    highWaterMark: options.highwaterMark || 16384,
     decodeStrings: false,
     objectMode: false,
-    write: (chunk, encoding, cb) => this.AudioOutAdon.write(chunk, cb)
+    write: (chunk, encoding, cb) => {
+      audioOutAdon.write(chunk, err => {
+        if (err)
+          process.nextTick(() => audioOutStream.emit('error', err));
+        cb();
+      });
+    }
   });
 
-  this.start = () => this.AudioOutAdon.start();
-  this.quit = cb => {
-    Active = false;
-    const quitCb = arguments[0];
-    this.AudioOutAdon.quit(() => {
-      if (typeof quitCb === 'function')
-        quitCb();
+  audioOutStream.start = () => audioOutAdon.start();
+
+  audioOutStream.quit = cb => {
+    audioOutAdon.quit(() => {
+      if (typeof cb === 'function')
+        cb();
     });
   }
-  this.on('finish', () => { if (Active) this.quit(); });
+
+  audioOutStream.on('close', () => console.log('AudioOut close'));
+  audioOutStream.on('finish', () => {
+    console.log('AudioOut finish');
+    audioOutStream.quit();
+  });
+  audioOutStream.on('error', err => console.error('AudioOut:', err));
+
+  return audioOutStream;
 }
-util.inherits(AudioOutput, Writable);
 exports.AudioOutput = AudioOutput;

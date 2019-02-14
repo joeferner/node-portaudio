@@ -13,16 +13,31 @@
   limitations under the License.
 */
 
-#include <napi.h>
-#include "GetDevices.h"
-#include "AudioIn.h"
-#include "AudioOut.h"
+// Plays the sound of a steam train from file 'test.wav'.
 
-Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
-  exports.Set(Napi::String::New(env, "getDevices"), Napi::Function::New(env, streampunk::GetDevices));
-  streampunk::AudioIn::Init(env, exports);
-  streampunk::AudioOut::Init(env, exports);
-  return exports;
-}
+var portAudio = require('../index.js');
 
-NODE_API_MODULE(NODE_GYP_MODULE_NAME, InitAll);
+var sampleRate = 44100;
+
+// console.log(portAudio.getDevices());
+
+var ai = new portAudio.AudioInput({
+  channelCount: 2,
+  sampleFormat: portAudio.SampleFormat16Bit,
+  sampleRate: sampleRate,
+  deviceId: 1
+});
+
+var ao = new portAudio.AudioOutput({
+  channelCount: 2,
+  sampleFormat: portAudio.SampleFormat16Bit,
+  sampleRate: sampleRate,
+  deviceId: -1 });
+
+ai.pipe(ao);
+
+ai.start();
+
+setTimeout(ao.start, 200);
+
+process.on('SIGINT', ai.quit);
