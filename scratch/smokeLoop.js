@@ -36,8 +36,7 @@ var ao = new portAudio.AudioOutput({
 
 ai.pipe(ao);
 
+ai.once('data', () => ao.start());
 ai.start();
-
-setTimeout(ao.start, 200);
 
 process.on('SIGINT', ai.quit);
