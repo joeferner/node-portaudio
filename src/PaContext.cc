@@ -81,7 +81,7 @@ PaContext::PaContext(Napi::Env env, Napi::Object inOptions, Napi::Object outOpti
 }
 
 PaContext::~PaContext() {
-  Pa_StopStream(mStream);
+  Pa_AbortStream(mStream);
   Pa_CloseStream(mStream);
   Pa_Terminate();
 }
@@ -94,8 +94,11 @@ void PaContext::start(Napi::Env env) {
   }
 }
 
-void PaContext::stop() {
-  Pa_StopStream(mStream);
+void PaContext::stop(eStopFlag flag) {
+  if (eStopFlag::ABORT == flag)
+    Pa_AbortStream(mStream);
+  else
+    Pa_StopStream(mStream);
   Pa_CloseStream(mStream);
   Pa_Terminate();
 }

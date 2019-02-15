@@ -48,7 +48,14 @@ function AudioInput(options) {
   audioInStream.start = () => audioInAdon.start();
 
   audioInStream.quit = cb => {
-    audioInAdon.quit(() => {
+    audioInAdon.quit('WAIT', () => {
+      if (typeof cb === 'function')
+        cb();
+    });
+  }
+
+  audioInStream.abort = cb => {
+    audioInAdon.quit('ABORT', () => {
       if (typeof cb === 'function')
         cb();
     });
@@ -84,7 +91,14 @@ function AudioOutput(options) {
   audioOutStream.start = () => audioOutAdon.start();
 
   audioOutStream.quit = cb => {
-    audioOutAdon.quit(() => {
+    audioOutAdon.quit('WAIT', () => {
+      if (typeof cb === 'function')
+        cb();
+    });
+  }
+
+  audioOutStream.abort = cb => {
+    audioOutAdon.quit('ABORT', () => {
       if (typeof cb === 'function')
         cb();
     });

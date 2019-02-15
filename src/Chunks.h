@@ -35,8 +35,8 @@ public:
   {}
   ~Chunk() {}
 
-  uint32_t numBytes() const { return mChunk->numBytes(); }
-  uint8_t *buf() const { return mChunk->buf(); }
+  uint32_t numBytes() const { return mChunk ? mChunk->numBytes() : 0; }
+  uint8_t *buf() const { return mChunk ? mChunk->buf() : nullptr; }
 
 private:
   std::shared_ptr<Memory> mChunk;

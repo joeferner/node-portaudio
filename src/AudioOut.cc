@@ -48,13 +48,13 @@ class OutWorker : public Napi::AsyncWorker {
 
 class QuitOutWorker : public Napi::AsyncWorker {
   public:
-    QuitOutWorker(std::shared_ptr<PaContext> paContext, const Napi::Function& callback)
-      : AsyncWorker(callback, "AudioQuitOut"), mPaContext(paContext)
+    QuitOutWorker(std::shared_ptr<PaContext> paContext, PaContext::eStopFlag stopFlag, const Napi::Function& callback)
+      : AsyncWorker(callback, "AudioQuitOut"), mPaContext(paContext), mStopFlag(stopFlag)
     { }
     ~QuitOutWorker() {}
 
     void Execute() {
-      mPaContext->stop();
+      mPaContext->stop(mStopFlag);
       mPaContext->quit();
     }
 
@@ -65,12 +65,12 @@ class QuitOutWorker : public Napi::AsyncWorker {
 
   private:
     std::shared_ptr<PaContext> mPaContext;
+    const PaContext::eStopFlag mStopFlag;
 };
 
 AudioOut::AudioOut(const Napi::CallbackInfo& info)
   : Napi::ObjectWrap<AudioOut>(info) {
   Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
 
   if ((info.Length() != 1) || !info[0].IsObject())
     throw Napi::TypeError::New(env, "AudioOut constructor expects an options object argument");
@@ -81,7 +81,6 @@ AudioOut::~AudioOut() {}
 
 Napi::Value AudioOut::Start(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
   mPaContext->start(env);
   return env.Undefined();
 }
@@ -105,20 +104,26 @@ Napi::Value AudioOut::Write(const Napi::CallbackInfo& info) {
 
 Napi::Value AudioOut::Quit(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (info.Length() != 1)
-    throw Napi::Error::New(env, "AudioOut Quit expects 1 argument");
-  if (!info[0].IsFunction())
+  if (info.Length() != 2)
+    throw Napi::Error::New(env, "AudioOut Quit expects 2 arguments");
+  if (!info[0].IsString())
+    throw Napi::TypeError::New(env, "AudioOut Quit expects a valid string as the first parameter");
+  if (!info[1].IsFunction())
     throw Napi::TypeError::New(env, "AudioOut Quit expects a valid callback as the parameter");
 
-  Napi::Function callback = info[0].As<Napi::Function>();
-  QuitOutWorker *quitWork = new QuitOutWorker(mPaContext, callback);
+  std::string stopFlagStr = info[0].As<Napi::String>().Utf8Value();
+  if ((0 != stopFlagStr.compare("WAIT")) && (0 != stopFlagStr.compare("ABORT")))
+    throw Napi::Error::New(env, "AudioOut Quit expects \'WAIT\' or \'ABORT\' as the first argument");
+  PaContext::eStopFlag stopFlag = (0 == stopFlagStr.compare("WAIT")) ?
+    PaContext::eStopFlag::WAIT : PaContext::eStopFlag::ABORT;
+
+  Napi::Function callback = info[1].As<Napi::Function>();
+  QuitOutWorker *quitWork = new QuitOutWorker(mPaContext, stopFlag, callback);
   quitWork->Queue();
   return env.Undefined();
 }
 
 void AudioOut::Init(Napi::Env env, Napi::Object exports) {
-  Napi::HandleScope scope(env);
-
   Napi::Function func = DefineClass(env, "AudioOut", {
     InstanceMethod("start", &AudioOut::Start),
     InstanceMethod("write", &AudioOut::Write),

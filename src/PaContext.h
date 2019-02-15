@@ -32,11 +32,13 @@ public:
   PaContext(Napi::Env env, Napi::Object inOptions, Napi::Object outOptions);
   ~PaContext();
 
+  enum class eStopFlag : uint8_t { WAIT = 0, ABORT = 1 };
+
   bool hasInput() { return mInOptions ? true : false; }
   bool hasOutput() { return mOutOptions ? true : false; }
 
   void start(Napi::Env env);
-  void stop();
+  void stop(eStopFlag flag);
 
   std::shared_ptr<Chunk> pullInChunk(uint32_t numBytes);
   void pushOutChunk(std::shared_ptr<Chunk> chunk);

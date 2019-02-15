@@ -61,13 +61,13 @@ class InWorker : public Napi::AsyncWorker {
 
 class QuitInWorker : public Napi::AsyncWorker {
   public:
-    QuitInWorker(std::shared_ptr<PaContext> paContext, const Napi::Function& callback)
-      : AsyncWorker(callback, "AudioQuitIn"), mPaContext(paContext)
+    QuitInWorker(std::shared_ptr<PaContext> paContext, PaContext::eStopFlag stopFlag, const Napi::Function& callback)
+      : AsyncWorker(callback, "AudioQuitIn"), mPaContext(paContext), mStopFlag(stopFlag)
     { }
     ~QuitInWorker() {}
 
     void Execute() {
-      mPaContext->stop();
+      mPaContext->stop(mStopFlag);
       mPaContext->quit();
     }
 
@@ -78,12 +78,12 @@ class QuitInWorker : public Napi::AsyncWorker {
 
   private:
     std::shared_ptr<PaContext> mPaContext;
+    const PaContext::eStopFlag mStopFlag;
 };
 
 AudioIn::AudioIn(const Napi::CallbackInfo& info) 
   : Napi::ObjectWrap<AudioIn>(info) {
   Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
 
   if ((info.Length() != 1) || !info[0].IsObject())
     throw Napi::Error::New(env, "AudioIn constructor expects an options object argument");
@@ -94,7 +94,6 @@ AudioIn::~AudioIn() {}
 
 Napi::Value AudioIn::Start(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  Napi::HandleScope scope(env);
   mPaContext->start(env);
   return env.Undefined();
 }
@@ -118,20 +117,26 @@ Napi::Value AudioIn::Read(const Napi::CallbackInfo& info) {
 
 Napi::Value AudioIn::Quit(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (info.Length() != 1)
-    throw Napi::Error::New(env, "AudioIn Quit expects 1 argument");
-  if (!info[0].IsFunction())
-    throw Napi::TypeError::New(env, "AudioIn Quit expects a valid callback as the parameter");
+  if (info.Length() != 2)
+    throw Napi::Error::New(env, "AudioIn Quit expects 2 arguments");
+  if (!info[0].IsString())
+    throw Napi::TypeError::New(env, "AudioIn Quit expects a valid string as the first parameter");
+  if (!info[1].IsFunction())
+    throw Napi::TypeError::New(env, "AudioIn Quit expects a valid callback as the second parameter");
 
-  Napi::Function callback = info[0].As<Napi::Function>();
-  QuitInWorker *quitWork = new QuitInWorker(mPaContext, callback);
+  std::string stopFlagStr = info[0].As<Napi::String>().Utf8Value();
+  if ((0 != stopFlagStr.compare("WAIT")) && (0 != stopFlagStr.compare("ABORT")))
+    throw Napi::Error::New(env, "AudioIn Quit expects \'WAIT\' or \'ABORT\' as the first argument");
+  PaContext::eStopFlag stopFlag = (0 == stopFlagStr.compare("WAIT")) ? 
+    PaContext::eStopFlag::WAIT : PaContext::eStopFlag::ABORT;
+
+  Napi::Function callback = info[1].As<Napi::Function>();
+  QuitInWorker *quitWork = new QuitInWorker(mPaContext, stopFlag, callback);
   quitWork->Queue();
   return env.Undefined();
 }
 
 void AudioIn::Init(Napi::Env env, Napi::Object exports) {
-  Napi::HandleScope scope(env);
-
   Napi::Function func = DefineClass(env, "AudioIn", {
     InstanceMethod("start", &AudioIn::Start),
     InstanceMethod("read", &AudioIn::Read),
