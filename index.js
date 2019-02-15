@@ -39,6 +39,8 @@ function AudioInput(options) {
         if (err)
           process.nextTick(() => audioInStream.emit('error', err));
         audioInStream.push(buf);
+        if (buf.length < size)
+          audioInStream.push(null);
       });
     }
   });

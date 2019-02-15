@@ -21,7 +21,7 @@
 
 namespace streampunk {
 
-class OutContext;
+class PaContext;
 
 class AudioOut : public Napi::ObjectWrap<AudioOut> {
 public:
@@ -36,7 +36,7 @@ private:
   Napi::Value Write(const Napi::CallbackInfo& info);
   Napi::Value Quit(const Napi::CallbackInfo& info);
 
-  std::shared_ptr<OutContext> mOutContext;
+  std::shared_ptr<PaContext> mPaContext;
 };
 
 } // namespace streampunk

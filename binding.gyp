@@ -6,7 +6,8 @@
         "src/naudiodon.cc",
         "src/GetDevices.cc",
       	"src/AudioIn.cc",
-      	"src/AudioOut.cc"
+      	"src/AudioOut.cc",
+      	"src/PaContext.cc"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
