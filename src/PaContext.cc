@@ -131,6 +131,12 @@ void PaContext::checkStatus(uint32_t statusFlags) {
       err += "input underflow ";
     if (statusFlags & paInputOverflow)
       err += "input overflow ";
+    if (statusFlags & paOutputUnderflow)
+      err += "output underflow ";
+    if (statusFlags & paOutputOverflow)
+      err += "output overflow ";
+    if (statusFlags & paPrimingOutput)
+      err += "priming output ";
 
     std::lock_guard<std::mutex> lk(m);
     mErrStr = err;
