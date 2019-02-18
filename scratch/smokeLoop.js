@@ -13,13 +13,33 @@
   limitations under the License.
 */
 
-#ifndef GETDEVICES_H
-#define GETDEVICES_H
+var portAudio = require('../index.js');
 
-namespace streampunk {
+var sampleRate = 44100;
 
-Napi::Value GetDevices(const Napi::CallbackInfo& info);
+// console.log(portAudio.getDevices());
 
-} // namespace streampunk
+var ai = new portAudio.AudioIO({
+  inOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: sampleRate,
+    deviceId: 1
+  }
+});
 
-#endif
+var ao = new portAudio.AudioIO({
+  outOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: sampleRate,
+    deviceId: -1
+  }
+});
+
+ai.pipe(ao);
+
+ai.once('data', () => ao.start());
+ai.start();
+
+process.on('SIGINT', ai.quit);

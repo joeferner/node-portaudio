@@ -1,4 +1,4 @@
-/* Copyright 2017 Streampunk Media Ltd.
+/* Copyright 2019 Streampunk Media Ltd.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -23,11 +23,14 @@ var sampleRate = 48000;
 
 console.log(portAudio.getDevices());
 
-var ao = new portAudio.AudioOutput({
-  channelCount: 2,
-  sampleFormat: portAudio.SampleFormat16Bit,
-  sampleRate: sampleRate,
-  deviceId: -1 });
+var ao = new portAudio.AudioIO({
+  outOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: sampleRate,
+    deviceId: -1
+  }
+});
 
 console.log('ao', ao);
 

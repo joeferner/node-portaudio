@@ -1,6 +1,6 @@
 {
   "name": "naudiodon",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Node Stream bindings for PortAudio.",
   "main": "./index.js",
   "keywords": [
@@ -20,7 +20,8 @@
   },
   "dependencies": {
     "bindings": "^1.4.0",
-    "nan": "^2.12.1"
+    "node-addon-api": "^1.1.0",
+    "segfault-handler": "^1.0.1"
   },
   "devDependencies": {
     "tape": "^4.10.1"

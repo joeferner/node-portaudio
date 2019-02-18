@@ -1,4 +1,4 @@
-/* Copyright 2017 Streampunk Media Ltd.
+/* Copyright 2019 Streampunk Media Ltd.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -16,18 +16,18 @@
 #ifndef PERSIST_H
 #define PERSIST_H
 
-#include <memory>
+#include <napi.h>
 
 namespace streampunk {
 
 class Persist {
 public:
-  Persist(v8::Local<v8::Object> object) 
-    : mPersistObj(object) {}
+  Persist(Napi::Object object) 
+    : mPersistObj(Napi::Persistent(object)) {}
   ~Persist() { mPersistObj.Reset(); }
 
 private:
-  Nan::Persistent<v8::Object> mPersistObj;
+  Napi::ObjectReference mPersistObj;
 };
 
 } // namespace streampunk

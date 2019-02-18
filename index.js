@@ -1,4 +1,4 @@
-/* Copyright 2017 Streampunk Media Ltd.
+/* Copyright 2019 Streampunk Media Ltd.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -13,13 +13,11 @@
   limitations under the License.
 */
 
-const util = require("util");
-const EventEmitter = require("events");
-const { Readable, Writable } = require('stream');
+const { Readable, Writable, Duplex } = require('stream');
 const portAudioBindings = require("bindings")("naudiodon.node");
 
-// var SegfaultHandler = require('segfault-handler');
-// SegfaultHandler.registerHandler("crash.log");
+var SegfaultHandler = require('segfault-handler');
+SegfaultHandler.registerHandler("crash.log");
 
 exports.SampleFormat8Bit = 8;
 exports.SampleFormat16Bit = 16;
@@ -28,60 +26,82 @@ exports.SampleFormat32Bit = 32;
 
 exports.getDevices = portAudioBindings.getDevices;
 
-function AudioInput(options) {
-  if (!(this instanceof AudioInput))
-    return new AudioInput(options);
+function AudioIO(options) {
+  const audioIOAdon = new portAudioBindings.AudioIO(options);
+  let ioStream;
 
-  this.AudioInAdon = new portAudioBindings.AudioIn(options);
-  Readable.call(this, {
-    highWaterMark: 16384,
-    objectMode: false,
-    read: size => {
-      this.AudioInAdon.read(size, (err, buf) => {
-        if (err)
-          console.error(err);
-          // this.emit('error', err); // causes Streampunk Microphone node to exit early...
-        else
-          this.push(buf);
-      });
-    }
-  });
+  const doRead = size => {
+    audioIOAdon.read(size, (err, buf) => {
+      if (err)
+        process.nextTick(() => ioStream.emit('error', err));
+        ioStream.push(buf);
+      if (buf && buf.length < size)
+      ioStream.push(null);
+    });
+  };
 
-  this.start = () => this.AudioInAdon.start();
-  this.quit = cb => {
-    const quitCb = arguments[0];
-    this.AudioInAdon.quit(() => {
-      if (typeof quitCb === 'function')
-        quitCb();
+  const doWrite = (chunk, encoding, cb) => {
+    audioIOAdon.write(chunk, err => {
+      if (err)
+        process.nextTick(() => ioStream.emit('error', err));
+      cb();
     });
   }
-}
-util.inherits(AudioInput, Readable);
-exports.AudioInput = AudioInput;
 
-function AudioOutput(options) {
-  if (!(this instanceof AudioOutput))
-    return new AudioOutput(options);
-
-  let Active = true;
-  this.AudioOutAdon = new portAudioBindings.AudioOut(options);
-  Writable.call(this, {
-    highWaterMark: 16384,
-    decodeStrings: false,
-    objectMode: false,
-    write: (chunk, encoding, cb) => this.AudioOutAdon.write(chunk, cb)
-  });
-
-  this.start = () => this.AudioOutAdon.start();
-  this.quit = cb => {
-    Active = false;
-    const quitCb = arguments[0];
-    this.AudioOutAdon.quit(() => {
-      if (typeof quitCb === 'function')
-        quitCb();
+  const readable = 'inOptions' in options;
+  const writable = 'outOptions' in options;
+  if (readable && writable) {
+    ioStream = new Duplex({
+      allowHalfOpen: false,
+      readableObjectMode: false,
+      writableObjectMode: false,
+      readableHighWaterMark: options.inOptions ? options.inOptions.highwaterMark || 16384 : 16384,
+      writableHighWaterMark: options.outOptions ? options.outOptions.highwaterMark || 16384 : 16384,
+      read: doRead,
+      write: doWrite
+    });
+  } else if (readable) {
+    ioStream = new Readable({
+      highWaterMark: options.highwaterMark || 16384,
+      objectMode: false,
+      read: doRead
+    });
+  } else {
+    ioStream = new Writable({
+      highWaterMark: options.highwaterMark || 16384,
+      decodeStrings: false,
+      objectMode: false,
+      write: doWrite
     });
   }
-  this.on('finish', () => { if (Active) this.quit(); });
+
+  ioStream.start = () => audioIOAdon.start();
+
+  ioStream.quit = cb => {
+  audioIOAdon.quit('WAIT', () => {
+    if (typeof cb === 'function')
+      cb();
+    });
+  }
+
+  ioStream.abort = cb => {
+    audioIOAdon.quit('ABORT', () => {
+      if (typeof cb === 'function')
+        cb();
+    });
+  }
+
+  ioStream.on('close', () => {
+    console.log('AudioIO close');
+    ioStream.quit();
+  });
+  ioStream.on('finish', () => {
+    console.log('AudioIO finish');
+    ioStream.quit();
+  });
+  ioStream.on('end', () => console.log('AudioIO end'));
+  ioStream.on('error', err => console.error('AudioIO:', err));
+
+  return ioStream;
 }
-util.inherits(AudioOutput, Writable);
-exports.AudioOutput = AudioOutput;
+exports.AudioIO = AudioIO;

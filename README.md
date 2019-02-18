@@ -5,7 +5,7 @@ A [Node.js](http://nodejs.org/) [addon](http://nodejs.org/api/addons.html) that 
 This is a fork of [node-portaudio](/joeferner/node-portaudio), refactored by:
 
 * changing from an event model to a stream model;
-* linking to the v8 libraries through the [Native Abstractions for Node.js (NAN)](/nodejs/nan) library to enable more portability between node versions.
+* using the new API for building native Addons [N-API](https://nodejs.org/dist/latest-v8.x/docs/api/n-api.html#n_api_n_api) to enable portability between node versions without recompiling.
 * adding in local copies of libraries so that portaudio does not have to be installed preemptively.
 
 Little of the original remains but I am very grateful for Joe Ferner for the inspiration and framework to get started.
@@ -16,11 +16,11 @@ Note: This is a server side library. It is not intended as a means to play and r
 
 ## Installation
 
-Install [Node.js](http://nodejs.org/) for your platform and make sure that node is able to build native modules with [node-gyp](https://github.com/nodejs/node-gyp). This software has been developed against the long term stable (LTS) release. For ease of installation with other node packages, this package includes a copy of the dependent PortAudio library and so has no prerequisites. 
+Install [Node.js](http://nodejs.org/) for your platform and make sure that node is able to build native modules with [node-gyp](https://github.com/nodejs/node-gyp). This software has been developed against the long term stable (LTS) release. For ease of installation with other node packages, this package includes a copy of the dependent PortAudio library and so has no prerequisites.
 
 Naudiodon is designed to be `require`d to use from your own application to provide async processing. For example:
 
-    npm install --save naudiodon
+    npm install naudiodon
 
 For Raspberry Pi users, please note that this library is not intended for use with the internal sound card. Please use an external USB sound card or GPIO breakout board such as the [_Pi-DAC+ Full-HD Audio Card_](https://www.modmypi.com/raspberry-pi/breakout-boards/iqaudio/pi-dac-plus-full-hd-audio-card/?tag=pi-dac).
 
@@ -75,29 +75,25 @@ Note that the device `id` parameter index value can be used as to specify which 
 
 ### Playing audio
 
-Playing audio involves streaming audio data to an instance of `AudioOutput`.
+Playing audio involves streaming audio data to a new instance of `AudioIO` configured with `outOptions` - which returns a Node.js [Writable Stream](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html#stream_writable_streams):
 
 ```javascript
 const fs = require('fs');
 const portAudio = require('naudiodon');
 
-// Create an instance of AudioOutput, which is a WriteableStream
-var ao = new portAudio.AudioOutput({
-  channelCount: 2,
-  sampleFormat: portAudio.SampleFormat16Bit,
-  sampleRate: 48000,
-  deviceId : -1 // Use -1 or omit the deviceId to select the default device
+// Create an instance of AudioIO with outOptions, which will return a WritableStream
+var ao = new portAudio.AudioIO({
+  outOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: 48000,
+    deviceId: -1 // Use -1 or omit the deviceId to select the default device
+  }
 });
-
-// handle errors from the AudioOutput
-ao.on('error', err => console.error);
 
 // Create a stream to pipe into the AudioOutput
 // Note that this does not strip the WAV header so a click will be heard at the beginning
 var rs = fs.createReadStream('steam_48000.wav');
-
-// setup to close the output stream at the end of the read stream
-rs.on('end', () => ao.end());
 
 // Start piping data and start streaming
 rs.pipe(ao);
@@ -106,22 +102,21 @@ ao.start();
 
 ### Recording audio
 
-Recording audio invovles reading from an instance of `AudioInput`.
+Recording audio involves streaming audio data from a new instance of `AudioIO` configured with `inOptions` - which returns a Node.js [Readable Stream](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html#stream_readable_streams):
 
 ```javascript
 var fs = require('fs');
 var portAudio = require('../index.js');
 
-// Create an instance of AudioInput, which is a ReadableStream
-var ai = new portAudio.AudioInput({
-  channelCount: 2,
-  sampleFormat: portAudio.SampleFormat16Bit,
-  sampleRate: 44100
-  deviceId : -1 // Use -1 or omit the deviceId to select the default device
+// Create an instance of AudioIO with inOptions, which will return a ReadableStream
+var ai = new portAudio.AudioIO({
+  inOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: 44100,
+    deviceId: -1 // Use -1 or omit the deviceId to select the default device
+  }
 });
-
-// handle errors from the AudioInput
-ai.on('error', err => console.error);
 
 // Create a write stream to write out to a raw audio file
 var ws = fs.createWriteStream('rawAudio.raw');
@@ -141,6 +136,32 @@ process.on('SIGINT', () => {
   console.log('Received SIGINT. Stopping recording.');
   ai.quit();
 });
+```
+
+### Bi-directional audio
+
+A bi-directional audio stream is available by creating an instance of `AudioIO` configured with both `inOptions` and `outOptions` - which returns a Node.js [Duplex stream](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html#stream_duplex_and_transform_streams):
+
+```javascript
+var portAudio = require('../index.js');
+
+// Create an instance of AudioIO with inOptions and outOptions, which will return a DuplexStream
+var aio = new portAudio.AudioIO({
+  inOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: 44100,
+    deviceId: -1 // Use -1 or omit the deviceId to select the default device
+  },
+  outOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: 44100,
+    deviceId: -1 // Use -1 or omit the deviceId to select the default device
+  }
+});
+
+aio.start();
 ```
 
 ## Troubleshooting

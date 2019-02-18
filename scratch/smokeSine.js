@@ -1,4 +1,4 @@
-/* Copyright 2017 Streampunk Media Ltd.
+/* Copyright 2019 Streampunk Media Ltd.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -25,21 +25,22 @@ for (var i = 0; i < tableSize * 4; i++) {
   buffer[i] = (Math.sin((i / tableSize) * 3.1415 * 2.0) * 127);
 }
 
-var ao = new portAudio.AudioOutput({
-  channelCount: 1,
-  sampleFormat: portAudio.SampleFormat8Bit,
-  sampleRate: sampleRate,
-  deviceId: -1
+var ao = new portAudio.AudioIO({
+  outOptions: {
+    channelCount: 1,
+    sampleFormat: portAudio.SampleFormat8Bit,
+    sampleRate: sampleRate,
+    deviceId: -1
+  }
 });
 
 function tenSecondsIsh(writer, data, callback) {
-  var i = 552;
-  write();
-  function write() {
+  this.i = 552;
+  const write = () => {
     var ok = true;
     do {
-      i -= 1;
-      if (i === 0) {
+      this.i -= 1;
+      if (this.i === 0) {
         // last time!
         writer.end(data, callback);
       } else {
@@ -48,19 +49,20 @@ function tenSecondsIsh(writer, data, callback) {
         ok = writer.write(data);
         // console.log('Writing data', ok);
       }
-    } while (i > 0 && ok);
-    if (i > 0) {
+    } while (this.i > 0 && ok);
+    if (this.i > 0) {
       // had to stop early!
       // write some more once it drains
       // console.log("So draining.");
       writer.once('drain', write);
     }
   }
+  write();
+  return this;
 }
+tenSecondsIsh.prototype.quit = function() { this.i = 1; }
 
-ao.on('error', console.error);
+let tsi = new tenSecondsIsh(ao, buffer, () => console.log.bind(null, "Done!"));
+process.once('SIGINT', () => tsi.quit());
 
-tenSecondsIsh(ao, buffer, console.log.bind(null, "Done!"));
 ao.start();
-
-process.once('SIGINT', ao.quit);

@@ -1,4 +1,4 @@
-/* Copyright 2017 Streampunk Media Ltd.
+/* Copyright 2019 Streampunk Media Ltd.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 #ifndef CHUNKQUEUE_H
 #define CHUNKQUEUE_H
 
-#include <nan.h>
 #include <queue>
 #include <mutex>
 #include <condition_variable>
@@ -43,8 +42,8 @@ public:
     while(mActive && qu.empty()) {
       cv.wait(lk);
     }
-    T val;
-    if (mActive) {
+    T val = 0;
+    if (!qu.empty()) {
       val = qu.front();
       qu.pop();
       cv.notify_one();
@@ -59,9 +58,9 @@ public:
 
   void quit() {
     std::lock_guard<std::mutex> lk(m);
+    mActive = false;
     if ((0 == qu.size()) || (qu.size() >= mMaxQueue)) {
       // ensure release of any blocked thread
-      mActive = false;
       cv.notify_all();
     }
   }

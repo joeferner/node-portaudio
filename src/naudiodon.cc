@@ -1,4 +1,4 @@
-/* Copyright 2017 Streampunk Media Ltd.
+/* Copyright 2019 Streampunk Media Ltd.
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -13,17 +13,14 @@
   limitations under the License.
 */
 
-#include <nan.h>
+#include <napi.h>
 #include "GetDevices.h"
-#include "AudioIn.h"
-#include "AudioOut.h"
+#include "AudioIO.h"
 
-NAN_MODULE_INIT(Init) {
-  Nan::Set(target, Nan::New("getDevices").ToLocalChecked(),
-    Nan::GetFunction(Nan::New<v8::FunctionTemplate>(streampunk::GetDevices)).ToLocalChecked());
-
-  streampunk::AudioIn::Init(target);
-  streampunk::AudioOut::Init(target);
+Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
+  exports.Set(Napi::String::New(env, "getDevices"), Napi::Function::New(env, streampunk::GetDevices));
+  streampunk::AudioIO::Init(env, exports);
+  return exports;
 }
 
-NODE_MODULE(portAudio, Init);
+NODE_API_MODULE(NODE_GYP_MODULE_NAME, InitAll);
