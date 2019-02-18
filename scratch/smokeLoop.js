@@ -13,8 +13,6 @@
   limitations under the License.
 */
 
-// Plays the sound of a steam train from file 'test.wav'.
-
 var portAudio = require('../index.js');
 
 var sampleRate = 44100;

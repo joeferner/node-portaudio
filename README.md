@@ -81,7 +81,7 @@ Playing audio involves streaming audio data to a new instance of `AudioIO` confi
 const fs = require('fs');
 const portAudio = require('naudiodon');
 
-// Create an instance of AudioIO with outOptions, which will return a WriteableStream
+// Create an instance of AudioIO with outOptions, which will return a WritableStream
 var ao = new portAudio.AudioIO({
   outOptions: {
     channelCount: 2,
@@ -102,13 +102,13 @@ ao.start();
 
 ### Recording audio
 
-Recording audio involves reading from an instance of `AudioIO` configured with `inOptions` - which returns a Node.js [Readable Stream](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html#stream_readable_streams):
+Recording audio involves streaming audio data from a new instance of `AudioIO` configured with `inOptions` - which returns a Node.js [Readable Stream](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html#stream_readable_streams):
 
 ```javascript
 var fs = require('fs');
 var portAudio = require('../index.js');
 
-// Create an instance of AudioIO win inOptions, which will return a ReadableStream
+// Create an instance of AudioIO with inOptions, which will return a ReadableStream
 var ai = new portAudio.AudioIO({
   inOptions: {
     channelCount: 2,
@@ -143,10 +143,9 @@ process.on('SIGINT', () => {
 A bi-directional audio stream is available by creating an instance of `AudioIO` configured with both `inOptions` and `outOptions` - which returns a Node.js [Duplex stream](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html#stream_duplex_and_transform_streams):
 
 ```javascript
-var fs = require('fs');
 var portAudio = require('../index.js');
 
-// Create an instance of AudioIO win inOptions and outOptions, which will return a DuplexStream
+// Create an instance of AudioIO with inOptions and outOptions, which will return a DuplexStream
 var aio = new portAudio.AudioIO({
   inOptions: {
     channelCount: 2,
@@ -162,13 +161,7 @@ var aio = new portAudio.AudioIO({
   }
 });
 
-// Create a write stream to write out to a raw audio file
-var ws = fs.createWriteStream('rawAudio.raw');
-
-//Start streaming
-ai.pipe(ws);
-ai.start();
-
+aio.start();
 ```
 
 ## Troubleshooting
