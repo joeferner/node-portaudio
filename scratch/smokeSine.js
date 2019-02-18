@@ -25,11 +25,13 @@ for (var i = 0; i < tableSize * 4; i++) {
   buffer[i] = (Math.sin((i / tableSize) * 3.1415 * 2.0) * 127);
 }
 
-var ao = new portAudio.AudioOutput({
-  channelCount: 1,
-  sampleFormat: portAudio.SampleFormat8Bit,
-  sampleRate: sampleRate,
-  deviceId: -1
+var ao = new portAudio.AudioIO({
+  outOptions: {
+    channelCount: 1,
+    sampleFormat: portAudio.SampleFormat8Bit,
+    sampleRate: sampleRate,
+    deviceId: -1
+  }
 });
 
 function tenSecondsIsh(writer, data, callback) {

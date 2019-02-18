@@ -13,8 +13,8 @@
   limitations under the License.
 */
 
-#ifndef AUDIOIN_H
-#define AUDIOIN_H
+#ifndef AUDIOIO_H
+#define AUDIOIO_H
 
 #include <napi.h>
 #include "Memory.h"
@@ -23,17 +23,18 @@ namespace streampunk {
 
 class PaContext;
 
-class AudioIn : public Napi::ObjectWrap<AudioIn> {
+class AudioIO : public Napi::ObjectWrap<AudioIO> {
 public:
   static void Init(Napi::Env env, Napi::Object exports);
-  AudioIn(const Napi::CallbackInfo& info);
-  ~AudioIn();
+  AudioIO(const Napi::CallbackInfo& info);
+  ~AudioIO();
 
 private:
   static Napi::FunctionReference constructor;
 
   Napi::Value Start(const Napi::CallbackInfo& info);
   Napi::Value Read(const Napi::CallbackInfo& info);
+  Napi::Value Write(const Napi::CallbackInfo& info);
   Napi::Value Quit(const Napi::CallbackInfo& info);
 
   std::shared_ptr<PaContext> mPaContext;

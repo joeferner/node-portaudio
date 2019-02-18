@@ -21,18 +21,23 @@ var sampleRate = 44100;
 
 // console.log(portAudio.getDevices());
 
-var ai = new portAudio.AudioInput({
-  channelCount: 2,
-  sampleFormat: portAudio.SampleFormat16Bit,
-  sampleRate: sampleRate,
-  deviceId: 1
+var ai = new portAudio.AudioIO({
+  inOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: sampleRate,
+    deviceId: 1
+  }
 });
 
-var ao = new portAudio.AudioOutput({
-  channelCount: 2,
-  sampleFormat: portAudio.SampleFormat16Bit,
-  sampleRate: sampleRate,
-  deviceId: -1 });
+var ao = new portAudio.AudioIO({
+  outOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: sampleRate,
+    deviceId: -1
+  }
+});
 
 ai.pipe(ao);
 

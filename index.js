@@ -13,9 +13,7 @@
   limitations under the License.
 */
 
-const util = require("util");
-const EventEmitter = require("events");
-const { Readable, Writable } = require('stream');
+const { Readable, Writable, Duplex } = require('stream');
 const portAudioBindings = require("bindings")("naudiodon.node");
 
 var SegfaultHandler = require('segfault-handler');
@@ -28,89 +26,82 @@ exports.SampleFormat32Bit = 32;
 
 exports.getDevices = portAudioBindings.getDevices;
 
-function AudioInput(options) {
-  const audioInAdon = new portAudioBindings.AudioIn(options);
+function AudioIO(options) {
+  const audioIOAdon = new portAudioBindings.AudioIO(options);
+  let ioStream;
 
-  const audioInStream = new Readable({
-    highWaterMark: options.highwaterMark || 16384,
-    objectMode: false,
-    read: size => {
-      audioInAdon.read(size, (err, buf) => {
-        if (err)
-          process.nextTick(() => audioInStream.emit('error', err));
-        audioInStream.push(buf);
-        if (buf && buf.length < size)
-          audioInStream.push(null);
-      });
-    }
-  });
+  const doRead = size => {
+    audioIOAdon.read(size, (err, buf) => {
+      if (err)
+        process.nextTick(() => ioStream.emit('error', err));
+        ioStream.push(buf);
+      if (buf && buf.length < size)
+      ioStream.push(null);
+    });
+  };
 
-  audioInStream.start = () => audioInAdon.start();
+  const doWrite = (chunk, encoding, cb) => {
+    audioIOAdon.write(chunk, err => {
+      if (err)
+        process.nextTick(() => ioStream.emit('error', err));
+      cb();
+    });
+  }
 
-  audioInStream.quit = cb => {
-    audioInAdon.quit('WAIT', () => {
+  const readable = 'inOptions' in options;
+  const writable = 'outOptions' in options;
+  if (readable && writable) {
+    ioStream = new Duplex({
+      allowHalfOpen: false,
+      readableObjectMode: false,
+      writableObjectMode: false,
+      readableHighWaterMark: options.inOptions ? options.inOptions.highwaterMark || 16384 : 16384,
+      writableHighWaterMark: options.outOptions ? options.outOptions.highwaterMark || 16384 : 16384,
+      read: doRead,
+      write: doWrite
+    });
+  } else if (readable) {
+    ioStream = new Readable({
+      highWaterMark: options.highwaterMark || 16384,
+      objectMode: false,
+      read: doRead
+    });
+  } else {
+    ioStream = new Writable({
+      highWaterMark: options.highwaterMark || 16384,
+      decodeStrings: false,
+      objectMode: false,
+      write: doWrite
+    });
+  }
+
+  ioStream.start = () => audioIOAdon.start();
+
+  ioStream.quit = cb => {
+  audioIOAdon.quit('WAIT', () => {
+    if (typeof cb === 'function')
+      cb();
+    });
+  }
+
+  ioStream.abort = cb => {
+    audioIOAdon.quit('ABORT', () => {
       if (typeof cb === 'function')
         cb();
     });
   }
 
-  audioInStream.abort = cb => {
-    audioInAdon.quit('ABORT', () => {
-      if (typeof cb === 'function')
-        cb();
-    });
-  }
-
-  audioInStream.on('close', () => {
-    console.log('AudioIn close');
-    audioInStream.quit();
+  ioStream.on('close', () => {
+    console.log('AudioIO close');
+    ioStream.quit();
   });
-  audioInStream.on('end', () => console.log('AudioIn end'));
-  audioInStream.on('error', err => console.error('AudioIn:', err));
+  ioStream.on('finish', () => {
+    console.log('AudioIO finish');
+    ioStream.quit();
+  });
+  ioStream.on('end', () => console.log('AudioIO end'));
+  ioStream.on('error', err => console.error('AudioIO:', err));
 
-  return audioInStream;
+  return ioStream;
 }
-exports.AudioInput = AudioInput;
-
-function AudioOutput(options) {
-  audioOutAdon = new portAudioBindings.AudioOut(options);
-
-  const audioOutStream = new Writable({
-    highWaterMark: options.highwaterMark || 16384,
-    decodeStrings: false,
-    objectMode: false,
-    write: (chunk, encoding, cb) => {
-      audioOutAdon.write(chunk, err => {
-        if (err)
-          process.nextTick(() => audioOutStream.emit('error', err));
-        cb();
-      });
-    }
-  });
-
-  audioOutStream.start = () => audioOutAdon.start();
-
-  audioOutStream.quit = cb => {
-    audioOutAdon.quit('WAIT', () => {
-      if (typeof cb === 'function')
-        cb();
-    });
-  }
-
-  audioOutStream.abort = cb => {
-    audioOutAdon.quit('ABORT', () => {
-      if (typeof cb === 'function')
-        cb();
-    });
-  }
-
-  audioOutStream.on('close', () => console.log('AudioOut close'));
-  audioOutStream.on('finish', () => {
-    console.log('AudioOut finish');
-    audioOutStream.quit();
-  });
-  audioOutStream.on('error', err => console.error('AudioOut:', err));
-
-  return audioOutStream;
-}
-exports.AudioOutput = AudioOutput;
+exports.AudioIO = AudioIO;

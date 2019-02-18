@@ -15,13 +15,11 @@
 
 #include <napi.h>
 #include "GetDevices.h"
-#include "AudioIn.h"
-#include "AudioOut.h"
+#include "AudioIO.h"
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "getDevices"), Napi::Function::New(env, streampunk::GetDevices));
-  streampunk::AudioIn::Init(env, exports);
-  streampunk::AudioOut::Init(env, exports);
+  streampunk::AudioIO::Init(env, exports);
   return exports;
 }
 

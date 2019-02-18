@@ -75,22 +75,21 @@ Note that the device `id` parameter index value can be used as to specify which 
 
 ### Playing audio
 
-Playing audio involves streaming audio data to an instance of `AudioOutput`.
+Playing audio involves streaming audio data to a new instance of `AudioIO` configured with `outOptions` - which returns a Node.js [Writable Stream](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html#stream_writable_streams):
 
 ```javascript
 const fs = require('fs');
 const portAudio = require('naudiodon');
 
-// Create an instance of AudioOutput, which is a WriteableStream
-var ao = new portAudio.AudioOutput({
-  channelCount: 2,
-  sampleFormat: portAudio.SampleFormat16Bit,
-  sampleRate: 48000,
-  deviceId: -1 // Use -1 or omit the deviceId to select the default device
+// Create an instance of AudioIO with outOptions, which will return a WriteableStream
+var ao = new portAudio.AudioIO({
+  outOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: 48000,
+    deviceId: -1 // Use -1 or omit the deviceId to select the default device
+  }
 });
-
-// handle errors from the AudioOutput
-ao.on('error', err => console.error);
 
 // Create a stream to pipe into the AudioOutput
 // Note that this does not strip the WAV header so a click will be heard at the beginning
@@ -103,22 +102,21 @@ ao.start();
 
 ### Recording audio
 
-Recording audio invovles reading from an instance of `AudioInput`.
+Recording audio involves reading from an instance of `AudioIO` configured with `inOptions` - which returns a Node.js [Readable Stream](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html#stream_readable_streams):
 
 ```javascript
 var fs = require('fs');
 var portAudio = require('../index.js');
 
-// Create an instance of AudioInput, which is a ReadableStream
-var ai = new portAudio.AudioInput({
-  channelCount: 2,
-  sampleFormat: portAudio.SampleFormat16Bit,
-  sampleRate: 44100
-  deviceId: -1 // Use -1 or omit the deviceId to select the default device
+// Create an instance of AudioIO win inOptions, which will return a ReadableStream
+var ai = new portAudio.AudioIO({
+  inOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: 44100,
+    deviceId: -1 // Use -1 or omit the deviceId to select the default device
+  }
 });
-
-// handle errors from the AudioInput
-ai.on('error', err => console.error);
 
 // Create a write stream to write out to a raw audio file
 var ws = fs.createWriteStream('rawAudio.raw');
@@ -138,6 +136,39 @@ process.on('SIGINT', () => {
   console.log('Received SIGINT. Stopping recording.');
   ai.quit();
 });
+```
+
+### Bi-directional audio
+
+A bi-directional audio stream is available by creating an instance of `AudioIO` configured with both `inOptions` and `outOptions` - which returns a Node.js [Duplex stream](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html#stream_duplex_and_transform_streams):
+
+```javascript
+var fs = require('fs');
+var portAudio = require('../index.js');
+
+// Create an instance of AudioIO win inOptions and outOptions, which will return a DuplexStream
+var aio = new portAudio.AudioIO({
+  inOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: 44100,
+    deviceId: -1 // Use -1 or omit the deviceId to select the default device
+  },
+  outOptions: {
+    channelCount: 2,
+    sampleFormat: portAudio.SampleFormat16Bit,
+    sampleRate: 44100,
+    deviceId: -1 // Use -1 or omit the deviceId to select the default device
+  }
+});
+
+// Create a write stream to write out to a raw audio file
+var ws = fs.createWriteStream('rawAudio.raw');
+
+//Start streaming
+ai.pipe(ws);
+ai.start();
+
 ```
 
 ## Troubleshooting
