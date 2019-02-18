@@ -24,7 +24,7 @@
     "segfault-handler": "^1.0.1"
   },
   "devDependencies": {
-    "tape": "^4.10.0"
+    "tape": "^4.10.1"
   },
   "author": "Streampunk Media Ltd",
   "license": "Apache-2.0",
