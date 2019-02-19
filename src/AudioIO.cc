@@ -31,7 +31,7 @@ public:
 class ReadWorker : public Napi::AsyncWorker {
   public:
     ReadWorker(std::shared_ptr<PaContext> paContext, uint32_t numBytes, const Napi::Function& callback)
-      : AsyncWorker(callback, "AudioRead"), mNumBytes(numBytes), mPaContext(paContext)
+      : AsyncWorker(callback, "AudioRead"), mPaContext(paContext), mNumBytes(numBytes)
     { }
     ~ReadWorker() {}
 
@@ -114,8 +114,8 @@ AudioIO::AudioIO(const Napi::CallbackInfo& info)
     throw Napi::Error::New(env, "AudioIO constructor expects an options object argument");
   
   Napi::Object optionsObj = info[0].As<Napi::Object>();
-  Napi::Object inOptions = Napi::Object::Object();
-  Napi::Object outOptions = Napi::Object::Object();
+  Napi::Object inOptions = Napi::Object();
+  Napi::Object outOptions = Napi::Object();
   if (optionsObj.Has("inOptions"))
     inOptions = optionsObj.Get("inOptions").As<Napi::Object>();
   if (optionsObj.Has("outOptions"))

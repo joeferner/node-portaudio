@@ -17,6 +17,7 @@
 #define PACONTEXT_H
 
 #include <napi.h>
+#include <memory>
 #include <mutex>
 
 struct PaStreamParameters;
@@ -60,9 +61,9 @@ private:
   std::string mErrStr;
   std::mutex m;
 
-  uint32_t PaContext::fillBuffer(uint8_t *buf, uint32_t numBytes,
-                                 std::shared_ptr<Chunks> chunks,
-                                 bool &finished);
+  uint32_t fillBuffer(uint8_t *buf, uint32_t numBytes,
+                      std::shared_ptr<Chunks> chunks,
+                      bool &finished);
 
   void setParams(Napi::Env env, bool isInput, 
                  std::shared_ptr<AudioOptions> options, 

@@ -168,7 +168,7 @@ bool PaContext::readPaBuffer(const void *srcBuf, uint32_t frameCount) {
 bool PaContext::fillPaBuffer(void *dstBuf, uint32_t frameCount) {
   uint32_t bytesRemaining = frameCount * mOutOptions->channelCount() * mOutOptions->sampleFormat() / 8;
   bool finished = false;
-  uint32_t bytesWritten = fillBuffer((uint8_t *)dstBuf, bytesRemaining, mOutChunks, finished);
+  fillBuffer((uint8_t *)dstBuf, bytesRemaining, mOutChunks, finished);
   return !finished;
 }
 
