@@ -15,7 +15,7 @@
 
 #include <napi.h>
 #include "GetDevices.h"
-#include "GetHostApis.h"
+#include "GetHostAPIs.h"
 #include "AudioIO.h"
 
 Napi::Object InitAll(Napi::Env env, Napi::Object exports) {

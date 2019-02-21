@@ -14,7 +14,7 @@
 */
 
 #include <napi.h>
-#include "GetHostApis.h"
+#include "GetHostAPIs.h"
 #include <portaudio.h>
 
 namespace streampunk {
