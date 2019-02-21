@@ -73,6 +73,29 @@ An example of the output is:
 
 Note that the device `id` parameter index value can be used as to specify which device to use for playback or recording with optional parameter `deviceId`.
 
+### Listing host APIs
+
+To get list of host APIs, call the `getHostAPIs()` function.
+
+```javascript
+var portAudio = require('naudiodon');
+
+console.log(portAudio.getHostAPIs());
+```
+An example of the output is:
+
+```javascript
+{ defaultHostAPI: 0,
+  HostAPIs:
+   [ { id: 0,
+       name: 'MME',
+       deviceCount: 8,
+       defaultInput: 1,
+       defaultOutput: 5 },
+      { /* ... */ } ] }
+```
+Note that the `defaultInput` and `defaultOutput` values can be used as to specify which device to use for playback or recording with optional parameter `deviceId`.
+
 ### Playing audio
 
 Playing audio involves streaming audio data to a new instance of `AudioIO` configured with `outOptions` - which returns a Node.js [Writable Stream](https://nodejs.org/dist/latest-v6.x/docs/api/stream.html#stream_writable_streams):

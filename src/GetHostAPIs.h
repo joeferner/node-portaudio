@@ -13,16 +13,15 @@
   limitations under the License.
 */
 
+#ifndef GETHOSTAPIS_H
+#define GETHOSTAPIS_H
+
 #include <napi.h>
-#include "GetDevices.h"
-#include "GetHostApis.h"
-#include "AudioIO.h"
 
-Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
-  exports.Set(Napi::String::New(env, "getDevices"), Napi::Function::New(env, streampunk::GetDevices));
-  exports.Set(Napi::String::New(env, "getHostAPIs"), Napi::Function::New(env, streampunk::GetHostAPIs));
-  streampunk::AudioIO::Init(env, exports);
-  return exports;
-}
+namespace streampunk {
 
-NODE_API_MODULE(NODE_GYP_MODULE_NAME, InitAll);
+Napi::Object GetHostAPIs(const Napi::CallbackInfo& info);
+
+} // namespace streampunk
+
+#endif
