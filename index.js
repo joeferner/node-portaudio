@@ -63,13 +63,13 @@ function AudioIO(options) {
     });
   } else if (readable) {
     ioStream = new Readable({
-      highWaterMark: options.highwaterMark || 16384,
+      highWaterMark: options.inOptions.highwaterMark || 16384,
       objectMode: false,
       read: doRead
     });
   } else {
     ioStream = new Writable({
-      highWaterMark: options.highwaterMark || 16384,
+      highWaterMark: options.outOptions.highwaterMark || 16384,
       decodeStrings: false,
       objectMode: false,
       write: doWrite
